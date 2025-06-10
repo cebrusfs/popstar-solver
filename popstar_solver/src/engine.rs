@@ -342,28 +342,24 @@ impl Board {
     }
 }
 
-// 4. Implement pretty_print (using std::fmt::Display)
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Column numbers
         write!(f, "  ")?; // Indent for row numbers
         for c_idx in 0..BOARD_SIZE {
-            // Left-align and pad to 2 spaces (e.g., "0 ", "1 ", ... "9 ")
             write!(f, "{:<2}", c_idx)?;
         }
         writeln!(f)?;
 
         for r_idx in 0..BOARD_SIZE {
-            // Row numbers, right-aligned, width 2
-            write!(f, "{:>2}", r_idx)?;
+            // Row numbers, left-aligned, width 2
+            write!(f, "{:<2}", r_idx)?;
+
             for c_idx in 0..BOARD_SIZE {
                 let tile = self.grid[r_idx][c_idx];
                 let char_representation = tile.to_char();
-                // [1;{COLOR_CODE}m{CHAR}{CHAR}[0m
-                // Using two characters for each cell like in C++ "  " or ".."
-                // The C++ version used "  " for colored blocks and ".." for selected.
                 // Here, we'll use TileChar+TileChar for colored.
-                write!(f, " [1;{}m{}{}[0m", // Added a space for padding between cells
+                write!(f, "\x1b[1;{}m{}{}\x1b[0m",
                        tile.to_ansi_color_code(),
                        char_representation,
                        char_representation)?;

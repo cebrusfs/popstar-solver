@@ -70,18 +70,18 @@ The AI solver requires a depth limit and can take an optional board file. If no 
 The board file should contain 10 lines, each with 10 characters representing the tiles (R, G, B, Y, P, or . for empty), without spaces.
 The board should represent a stable state: tiles must have settled under gravity (i.e., no tiles floating above empty cells within the same column).
 
-For example, a board with some empty cells in the top-right might look like this in the file:
+For example, a valid 10x10 board might look like this in the file:
 ```
-RGYBPRG...
-BPRGYBP...
-YRGYBPG...
-GYBPMRGYBP
-PMRGYBPMRG
-RGYBPRGYBP
-BPRGYBPMRG
-YRGYBPGRBP
-GYBPMRGYPM
-PMRGYBPMRG
+RRGYB.RYPG
+GRBYP.PYRB
+PYBRGGRYPB
+BYPGRYBPGR
+RYBPGGBYPR
+PGRYBRYPGB
+YBRPGPBRYP
+GBYPRYGBPR
+PYBGRPBYGR
+RBGPYRYBGP
 ```
 
 **Examples:**
@@ -91,16 +91,16 @@ PMRGYBPMRG
 To create a board file (e.g., `my_board.txt`), you can use a text editor or the following `cat` command in your terminal:
 ```bash
 cat << EOF > my_board.txt
-RGYBPRGYBP
-BPRGYBPMRG
-YRGYBPGRBP
-GYBPMRGYPM
-PMRGYBPMRG
-RGYBPRGYBP
-BPRGYBPMRG
-YRGYBPGRBP
-GYBPMRGYPM
-PMRGYBPMRG
+RRGYB.RYPG
+GRBYP.PYRB
+PYBRGGRYPB
+BYPGRYBPGR
+RYBPGGBYPR
+PGRYBRYPGB
+YBRPGPBRYP
+GBYPRYGBPR
+PYBGRPBYGR
+RBGPYRYBGP
 EOF
 ```
 This will create `my_board.txt` with the specified content.
