@@ -125,7 +125,7 @@ enum COLOR {
 };
 */
 
-const char COLOR_SYMBOL[] = ".rgbyp";
+const char COLOR_SYMBOL[] = ".RGBYP";
 const int COLOR2ASCII[] = {40, 41, 42, 44, 43, 45};
 
 const int EMPTY = 0;

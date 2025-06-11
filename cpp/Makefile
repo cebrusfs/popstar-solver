@@ -1,4 +1,4 @@
-CXX=g++-13
+CXX=g++-15
 #popstar_ai_debug: popstar_ai.cpp
 #	$(CXX) $< -g -Wall -Wextra -std=c++1z -lpthread -fopenmp -DFISH -o $@
 
