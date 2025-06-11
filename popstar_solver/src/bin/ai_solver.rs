@@ -1,6 +1,6 @@
 use clap::Parser;
 use popstar_solver::engine::Game;
-use popstar_solver::solver::solve_dfs;
+use popstar_solver::solver::{solve_dfs, Solution};
 use popstar_solver::utils::board_from_str_array;
 use std::fs;
 use std::path::PathBuf;
@@ -42,25 +42,42 @@ fn read_board_file(path: &PathBuf) -> Result<Game, String> {
 
 fn main() {
     let args = Args::parse();
+    println!("Searching for solution with depth limit {}...", args.depth);
 
-    let game = read_board_file(&args.board_file).expect(&format!("Failed to read board from file: {}", args.board_file.display()));
-    println!("Loaded board from {}\n", args.board_file.display());
-    println!("Initial board state:\n{}\n", game.board());
-    println!("Searching for solution with depth limit {}...\n", args.depth);
+    let mut game = read_board_file(&args.board_file).expect(&format!("Failed to read board from file: {}", args.board_file.display()));
+    println!("Loaded board from {}", args.board_file.display());
+    println!("{}", game.board());
 
-    if let Some(solution) = solve_dfs(&game, args.depth) {
-        println!("Solution found:\n");
-        println!("Moves ({}):", solution.steps_taken);
-        if solution.moves.is_empty() {
-            println!("  No moves made.");
-        } else {
-            for (i, (r, c)) in solution.moves.iter().enumerate() {
-                println!("  Move {}: ({}, {})", i + 1, r, c);
+    let mut known_best_solution = Solution {
+        moves: Vec::new(),
+        score: 0,
+        steps_taken: 0,
+    };
+    let mut step = 1;
+    while !game.is_game_over() {
+        println!("Step {}", step);
+        println!("Known best score: {}", known_best_solution.score);
+
+        if let Some(solution) = solve_dfs(&game, args.depth) {
+            // Store the best solution found so far and compared with the current solution
+            // if the current solution is better, then update the best solution
+            if solution.score >= known_best_solution.score {
+                known_best_solution = solution;
             }
+
+            let best_move = known_best_solution.moves.remove(0);
+            println!("{}", game.board().to_string_with_highlight(Some(best_move)));
+
+            game.process_move(best_move.0, best_move.1);
+            println!("Score: --> {}", game.score());
+            println!("");
+        } else {
+            println!("No solution found.");
+            break;
         }
-        println!("Final score: {}\n", solution.score);
-        println!("Final board state:\n{}\n", solution.final_board_state);
-    } else {
-        println!("No solution found.\n");
+        step += 1;
     }
+    println!("Steps: {}", step);
+    println!("{}", game.board());
+    println!("Score: --> {}", game.final_score());
 }

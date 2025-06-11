@@ -6,13 +6,13 @@ fn main() {
     println!("Welcome to PopStar!");
 
     loop {
-        println!("
-Steps: {}, Score: {}", game.steps(), game.score());
+        println!("---------------------");
+        println!("Steps: {}, Score: {}", game.steps(), game.score());
         println!("{}", game.board()); // Display the board
 
         if game.is_game_over() {
-            println!("
----------------------");
+            println!("");
+            println!("---------------------");
             println!("🎉 GAME OVER! 🎉");
             println!("Final Score: {}", game.final_score());
             println!("Total Steps: {}", game.steps());

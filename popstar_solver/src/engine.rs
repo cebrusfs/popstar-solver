@@ -8,8 +8,13 @@
 //!   and processing player moves.
 use std::fmt;
 use std::collections::VecDeque; // For BFS in find_groups
+/// Position and character to highlight on the board
+pub struct Highlight {
+    pub row: usize,
+    pub col: usize,
+    pub ch: char,
+}
 
-// 1. Define Tile enum
 /// Represents the type of a tile on the game board.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)] // Added Hash for later use in solver
 pub enum Tile {
@@ -63,17 +68,16 @@ impl Tile {
     /// Returns the ANSI color code string for terminal output.
     fn to_ansi_color_code(&self) -> &'static str {
         match self {
-            Tile::Empty => "0", // Default terminal color (reset)
-            Tile::Red => "31",   // Red
-            Tile::Green => "32", // Green
-            Tile::Blue => "34",  // Blue
-            Tile::Yellow => "33",// Yellow
-            Tile::Purple => "35",// Purple
+            Tile::Empty => "40", // Default terminal color (reset)
+            Tile::Red => "41",   // Red
+            Tile::Green => "42", // Green
+            Tile::Yellow => "43",// Yellow
+            Tile::Blue => "44",  // Blue
+            Tile::Purple => "45",// Purple
         }
     }
 }
 
-// 2. Create Board struct
 /// Represents the side length of the square game board (e.g., 10 for a 10x10 board).
 pub const BOARD_SIZE: usize = 10;
 
@@ -85,8 +89,6 @@ pub struct Board {
 }
 
 impl Board {
-    // 3. Implement board initialization
-
     /// Creates a new empty game board with all tiles set to `Tile::Empty`.
     pub fn new_empty() -> Self {
         Board {
@@ -147,26 +149,58 @@ impl Board {
         self.grid[r][c]
     }
 
-    // Setter for a tile (used by game mechanics)
-    // Made pub(crate) as it's mainly for internal engine operations.
-    pub(crate) fn set_tile(&mut self, r: usize, c: usize, tile: Tile) {
-        // Similar to get_tile, assuming valid r, c for internal use.
+    /// Sets the tile at the specified row and column.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `r` or `c` are out of bounds (>= `BOARD_SIZE`).
+    pub fn set_tile(&mut self, r: usize, c: usize, tile: Tile) {
         self.grid[r][c] = tile;
     }
 
-    // Provides a direct mutable reference to the grid if needed for complex operations
-    // Be cautious with exposing this too widely.
-    pub(crate) fn get_grid_mut(&mut self) -> &mut [[Tile; BOARD_SIZE]; BOARD_SIZE] {
+    /// Returns a mutable reference to the underlying 2D grid of tiles.
+    ///
+    /// Use with caution: modifying the grid directly can violate game invariants.
+    pub fn get_grid_mut(&mut self) -> &mut [[Tile; BOARD_SIZE]; BOARD_SIZE] {
         &mut self.grid
     }
 
-    // Provides an immutable reference to the grid
     /// Returns an immutable reference to the underlying 2D grid of tiles.
     pub fn get_grid(&self) -> &[[Tile; BOARD_SIZE]; BOARD_SIZE] {
         &self.grid
     }
 
-    // 1. Find Groups
+    ///
+    /// # Arguments
+    /// * `pos` - Optional position to highlight
+    pub fn to_string_with_highlight(&self, pos: Option<(usize, usize)>) -> String {
+        let mut output = String::new();
+
+        // Column numbers
+        output.push_str("  ");
+        for c_idx in 0..BOARD_SIZE {
+            output.push_str(&format!("{:<2}", c_idx));
+        }
+        output.push('\n');
+
+        for r_idx in 0..BOARD_SIZE {
+            // Row numbers
+            output.push_str(&format!("{:<2}", r_idx));
+
+            for c_idx in 0..BOARD_SIZE {
+                let is_highlight = pos.map_or(false, |p| p.0 == r_idx && p.1 == c_idx);
+                let color_code = self.grid[r_idx][c_idx].to_ansi_color_code();
+                let content = if is_highlight { ".." } else { "  " };
+                output.push_str(&format!("\x1b[1;{};m{}\x1b[m", color_code, content));
+            }
+            if r_idx < BOARD_SIZE - 1 {
+                output.push('\n');
+            }
+        }
+
+        output
+    }
+
     /// Finds a connected group of same-colored tiles starting from the given coordinates (`r`, `c`).
     ///
     /// A group must consist of at least two tiles. Tiles are considered connected if they
@@ -253,6 +287,14 @@ impl Board {
         all_groups
     }
 
+    /// Eliminates a group of tiles from the board.
+    ///
+    /// # Arguments
+    /// * `group`: A reference to a vector of tile coordinates to be eliminated.
+    ///
+    /// # Returns
+    /// The score obtained from eliminating the group, calculated as `n * n * 5`,
+    /// where `n` is the number of tiles in the group.
     pub fn eliminate_group(&mut self, group: &[(usize, usize)]) -> u32 {
         if group.is_empty() {
             return 0;
@@ -344,33 +386,10 @@ impl Board {
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Column numbers
-        write!(f, "  ")?; // Indent for row numbers
-        for c_idx in 0..BOARD_SIZE {
-            write!(f, "{:<2}", c_idx)?;
-        }
-        writeln!(f)?;
-
-        for r_idx in 0..BOARD_SIZE {
-            // Row numbers, left-aligned, width 2
-            write!(f, "{:<2}", r_idx)?;
-
-            for c_idx in 0..BOARD_SIZE {
-                let tile = self.grid[r_idx][c_idx];
-                let char_representation = tile.to_char();
-                // Here, we'll use TileChar+TileChar for colored.
-                write!(f, "\x1b[1;{}m{}{}\x1b[0m",
-                       tile.to_ansi_color_code(),
-                       char_representation,
-                       char_representation)?;
-            }
-            writeln!(f)?;
-        }
-        Ok(())
+        write!(f, "{}", self.to_string_with_highlight(None))
     }
 }
 
-// 4. Create Game Struct
 /// Manages the state and progression of a PopStar game session.
 ///
 /// This includes the current board, score, number of steps taken,

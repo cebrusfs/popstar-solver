@@ -12,8 +12,6 @@ pub struct Solution {
     pub moves: Vec<(usize, usize)>,
     /// The final score achieved after these moves, including any end-game bonus.
     pub score: u32,
-    /// The state of the board after all moves in the sequence have been applied.
-    pub final_board_state: Board,
     /// The number of moves (eliminations) performed by the solver to reach this solution.
     /// This corresponds to the `steps` in the `Game` struct.
     pub steps_taken: u32,
@@ -66,25 +64,18 @@ fn find_best_solution_recursive(
         return Some(Solution {
             moves: current_moves_path,
             score: current_game_state.final_score(), // Use final_score (includes bonus)
-            final_board_state: current_game_state.board().clone(),
             steps_taken: current_game_state.steps(),
         });
     }
 
     // Base case 2: Depth limit reached
     if depth_remaining == 0 {
-        // At depth limit, we don't explore further.
-        // We can either:
-        //   a) Return the score of the current board as is (using current_score + bonus).
-        //   b) Or, if the C++ version had a heuristic at depth limit, apply it here.
-        //      The C++ `h_func` seems to be a greedy playout.
-        //      For now, let's just use the current game's final score.
-        //      A more advanced solver might use a heuristic evaluation of the board here.
+        // At depth limit, evaluate using heuristic playout.
+        let heuristic_score = evaluate_with_heuristic(current_game_state.clone());
         return Some(Solution {
-            moves: current_moves_path,
-            score: current_game_state.final_score(),
-            final_board_state: current_game_state.board().clone(),
-            steps_taken: current_game_state.steps(),
+            moves: current_moves_path, // Path taken to reach this state (before heuristic)
+            score: heuristic_score,    // Score obtained from the heuristic playout
+            steps_taken: current_game_state.steps(), // Steps taken to reach *this* state
         });
     }
 
@@ -99,13 +90,12 @@ fn find_best_solution_recursive(
         return Some(Solution {
             moves: current_moves_path,
             score: current_game_state.final_score(),
-            final_board_state: current_game_state.board().clone(),
             steps_taken: current_game_state.steps(),
         });
     }
 
     for group in available_groups {
-        if group.is_empty() { continue; } // Should not happen with find_all_groups
+        assert!(!group.is_empty());
 
         // Pick the first tile of the group as the representative click point for this move
         let (r_click, c_click) = group[0];
@@ -113,12 +103,9 @@ fn find_best_solution_recursive(
         let mut next_game_state = current_game_state.clone();
         let move_was_valid = next_game_state.process_move(r_click, c_click);
 
-        if !move_was_valid {
-            // This should ideally not happen if find_all_groups gives valid, non-empty groups
-            // and process_move correctly handles them.
-            // Could add an error log here if it occurs.
-            continue;
-        }
+        // This should ideally not happen if find_all_groups gives valid, non-empty groups
+        // and process_move correctly handles them.
+        assert!(move_was_valid);
 
         // Check if this new board state has been visited
         if visited_states.contains(next_game_state.board()) {
@@ -131,7 +118,7 @@ fn find_best_solution_recursive(
         new_moves_path.push((r_click, c_click));
 
         if let Some(solution_from_this_path) = find_best_solution_recursive(
-            next_game_state.clone(), // Pass the state *after* the move
+            next_game_state, // Pass the state *after* the move
             depth_remaining - 1,
             visited_states,
             new_moves_path,
@@ -190,12 +177,56 @@ fn find_best_solution_recursive(
         return Some(Solution {
             moves: current_moves_path,
             score: current_game_state.final_score(),
-            final_board_state: current_game_state.board().clone(),
             steps_taken: current_game_state.steps(),
         });
     }
 
     best_solution_found
+}
+
+fn evaluate_with_heuristic(game_state: Game) -> u32 {
+    let mut simulated_game = game_state; // Caller clones, so we can consume/mutate directly.
+
+    while !simulated_game.is_game_over() {
+        // find_all_groups returns Vec<(usize, usize)> for one tile from each group.
+        // This is what we need to iterate through potential moves.
+        let available_moves_coords = simulated_game.board().find_all_groups();
+
+        if available_moves_coords.is_empty() {
+            // This can happen if the board is not game_over but has no groups (e.g. single tiles scattered)
+            // or if find_all_groups filters out groups of size 1.
+            break;
+        }
+
+        let mut best_move_coord: Option<(usize, usize)> = None;
+        let mut max_immediate_score = 0;
+
+        for group in &available_moves_coords {
+            // According to definition of find_all_groups, groups should have at least 2 tiles.
+            assert!(group.len() >= 2);
+
+            let n = group.len() as u32;
+            let immediate_score = n * n * 5;
+
+            if immediate_score > max_immediate_score {
+                max_immediate_score = immediate_score;
+                best_move_coord = Some(group.first().unwrap().clone());
+            }
+        }
+
+        if let Some((r_best, c_best)) = best_move_coord {
+            // process_move updates the game state and its internal score.
+            // It also handles board compaction.
+            simulated_game.process_move(r_best, c_best);
+        } else {
+            // No valid group found to make a move (e.g. all groups were size 0, or find_all_unique_group_coords
+            // returned coordinates that get_group_at couldn't find, which would be an inconsistency).
+            // Or, all groups found had n=0 (filtered by the continue).
+            break;
+        }
+    }
+    // final_score() typically includes the current score from moves + any end-game bonus (e.g. for clearing board).
+    simulated_game.final_score()
 }
 
 
