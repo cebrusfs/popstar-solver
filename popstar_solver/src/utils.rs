@@ -2,6 +2,9 @@ use crate::engine::{Board, Tile, BOARD_SIZE};
 
 /// Parses an array of string slices into a `Board` object.
 ///
+/// TODO: ensure the input is the bottom x rows of the board. The tops will automatically be filled with empty tiles.
+/// TODO: Check if the input board is valid. (or should be checked in Board constructor?)
+///
 /// Each string slice in the input array represents a row on the board.
 /// Characters 'R', 'G', 'B', 'Y', 'P' map to their respective `Tile` colors.
 /// The character '.' maps to `Tile::Empty`. Any other character will also default to `Tile::Empty`

@@ -224,9 +224,10 @@ mod tests {
 
     #[test]
     fn test_solve_dfs_simple_one_move_max() {
+        // TODO: fix the tests by considering the heuristic function involved, should we change the test way?
         let board = board_from_str_array(&[
-            "RR........",
             "G.........",
+            "RR........",
             "BBB.......",
         ]).unwrap();
         let game = Game::new_with_board(board);
@@ -236,7 +237,7 @@ mod tests {
         let sol = solution.unwrap();
 
         assert_eq!(sol.moves.len(), 1, "Expected one move at depth 1");
-        assert_eq!(sol.moves[0], (2,0), "Expected move was not (2,0) for BBB group");
+        assert_eq!(sol.moves[0], (2,0), "Expected move should be (2,0) for BBB group");
 
         let mut temp_game = game.clone();
         temp_game.process_move(2,0);
