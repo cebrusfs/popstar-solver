@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.3", features = ["derive"] }
+rand = { version = "0.8.5", features = ["small_rng"] }
 
 [[bin]]
 name = "human_player"

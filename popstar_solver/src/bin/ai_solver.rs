@@ -17,21 +17,28 @@ struct Args {
 }
 
 fn read_board_file(path: &PathBuf) -> Result<Game, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let lines: Vec<&str> = content.lines()
+    let lines: Vec<&str> = content
+        .lines()
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
 
     if lines.len() != 10 {
-        return Err(format!("Expected 10 lines in board file, found {}", lines.len()));
+        return Err(format!(
+            "Expected 10 lines in board file, found {}",
+            lines.len()
+        ));
     }
 
     for (i, line) in lines.iter().enumerate() {
         if line.len() != 10 {
-            return Err(format!("Line {} has {} characters (expected 10)", i + 1, line.len()));
+            return Err(format!(
+                "Line {} has {} characters (expected 10)",
+                i + 1,
+                line.len()
+            ));
         }
     }
 
@@ -44,7 +51,10 @@ fn main() {
     let args = Args::parse();
     println!("Searching for solution with depth limit {}...", args.depth);
 
-    let mut game = read_board_file(&args.board_file).expect(&format!("Failed to read board from file: {}", args.board_file.display()));
+    let mut game = read_board_file(&args.board_file).expect(&format!(
+        "Failed to read board from file: {}",
+        args.board_file.display()
+    ));
     println!("Loaded board from {}", args.board_file.display());
     println!("{}", game.board());
 

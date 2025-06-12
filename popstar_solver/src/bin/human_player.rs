@@ -57,7 +57,10 @@ fn main() {
                         println!("Invalid move: No group of 2 or more found at ({}, {}), or tile is empty.", r, c);
                     }
                 } else {
-                    println!("Invalid coordinates: Row and column must be between 0 and {}.", BOARD_SIZE - 1);
+                    println!(
+                        "Invalid coordinates: Row and column must be between 0 and {}.",
+                        BOARD_SIZE - 1
+                    );
                 }
             } else {
                 println!("Invalid input: Please enter numbers for row and column (e.g., '3 4'), 'u', or 'q'.");
