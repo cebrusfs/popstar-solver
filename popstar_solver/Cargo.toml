@@ -15,3 +15,4 @@ path = "src/bin/human_player.rs"
 [[bin]]
 name = "ai_solver"
 path = "src/bin/ai_solver.rs"
+

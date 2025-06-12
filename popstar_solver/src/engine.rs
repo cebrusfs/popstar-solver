@@ -357,7 +357,7 @@ impl fmt::Display for Board {
 ///
 /// This includes the current board, score, number of steps taken,
 /// and a history of states for undo functionality.
-#[derive(Clone)] // Clone is needed for history and potentially for solver states
+#[derive(Clone, Debug)] // Clone is needed for history and potentially for solver states
 pub struct Game {
     board: Board,
     current_score: u32,

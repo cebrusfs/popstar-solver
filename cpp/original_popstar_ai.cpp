@@ -318,7 +318,7 @@ class Game {
 
     char (*mp)[MAX];
 
-    unordered_map<HASH, int> hash_table;
+    unordered_set<HASH> hash_table;
 
     GROUP actions[MAX*MAX];
     int history_score[MAX*MAX];
@@ -452,12 +452,9 @@ class Game {
         return max(2000 - cnt * cnt * 20, 0);
     }
 
-    int h_func()
+    void h_func()
     {
-        int current_step = step;
-
-        int score_at_h_entry = currect_score();
-        int max_additional_score_found = -1;
+        int currect_step = step;
 
         for (const auto& strategy : strategies)
         {
@@ -470,74 +467,51 @@ class Game {
                 eliminate(p);
             }
 
-            // Calculate additional score from this strategy
-            int total_score = currect_score() + cal_end();
-            int additional_score = total_score - score_at_h_entry;
-
-            max_additional_score_found = std::max(max_additional_score_found, additional_score);
-
             if (update_best()) break;
 
-            recover(current_step); // Recover to state at h_func entry before next strategy
+            recover(currect_step);
         }
-
-        return max_additional_score_found;
     }
 
-    // Modified solve to return score and use memoization
-    int solve(int dep, int limit)
+    void solve(int dep, int limit)
     {
         auto h = cal_hash();
         auto it = hash_table.find(h);
-        if (it != hash_table.end())
-        {
-            int candidate_score = currect_score() + it->second;
-            if (candidate_score <= global_best_score) {
-                return it->second; // Return stored max score for this state
-            }
-            // if found a better score, continue to re-calculate
-        }
+        if (it != hash_table.end()) return ;
+
+        hash_table.insert(h);
 
         if (dep >= limit)
         {
-            int total_score_from_current_state = this->h_func(); // Call the modified h_func
-            hash_table[h] = total_score_from_current_state; // Memoize this heuristic terminal value
-            return total_score_from_current_state;
+            h_func();
+            return ;
         }
 
-        const auto& gs = get_color_groups(); // Get groups for current state AFTER potential return from hash_table
+        const auto& gs = get_color_groups();
 
         if (gs.empty())
         {
-            int total_score_from_current_state = this->h_func(); // Call the modified h_func
-            hash_table[h] = total_score_from_current_state; // Memoize this heuristic terminal value
-            return total_score_from_current_state;
+            update_best();
+            return ;
         }
 
-        int max_score_from_this_state = 0; // PopStar scores are non-negative
-        int current_step_backup = step; // Store current step to recover to
-
-        for (const auto& g : gs) {
+        int currect_step = step;
+        for (const auto& g: gs)
+        {
             assert(g.second.size() >= 2);
 
-            int current_elimination_score = eliminate(g.second);
-            int score_from_future_moves = solve(dep + 1, limit);
+            eliminate(g.second);
+            solve(dep + 1, limit);
 
-            max_score_from_this_state = std::max(max_score_from_this_state, current_elimination_score + score_from_future_moves);
-
-            recover(current_step_backup); // Recover state for next iteration
+            recover(currect_step);
         }
-
-        hash_table[h] = max_score_from_this_state; // Memoize result for current state before returning
-        return max_score_from_this_state;
     }
 
     void parallel_solve(int limit)
     {
-        hash_table.clear(); // Clear main hash_table for this call; it will be repopulated with merged results.
+        hash_table.clear();
         const auto& gs = get_color_groups();
         dump(gs.size());
-
 #if defined(_OPENMP)
         #pragma omp parallel for schedule(dynamic)
 #endif
@@ -555,20 +529,10 @@ class Game {
             #pragma omp critical
 #endif
             {
-                // Merge hash_table from temp_game into the main game's hash_table
-                // .merge() won't update the value if the key already exists
                 hash_table.merge(temp_game.hash_table);
 
-                // Update hash_table if the value is greater
-                for (const auto& entry : temp_game.hash_table) {
-                    auto it = hash_table.find(entry.first);
-                    if (it == hash_table.end() || entry.second > it->second) {
-                        hash_table[entry.first] = entry.second;
-                    }
-                }
-
-                // If this child produced a better solution, copy its full solution path
-                if (temp_game.global_best_score > global_best_score) {
+                if (temp_game.global_best_score > global_best_score)
+                {
                     global_best_score = temp_game.global_best_score;
                     global_best_actions = temp_game.global_best_actions;
                 }
@@ -728,7 +692,6 @@ int main(int argc, char *argv[])
      */
     game.pretty_print();
 
-    // Local function to compute the adjusted search depth based on step
     auto calc_real_depth = [](int step, int base_depth) -> int {
         int adjusted = base_depth;
         switch (step)
@@ -760,7 +723,6 @@ int main(int argc, char *argv[])
         }
         return adjusted;
     };
-
     while (true)
     {
         struct timespec start, finish;

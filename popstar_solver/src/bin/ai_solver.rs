@@ -58,7 +58,8 @@ fn main() {
         println!("Step {}", step);
         println!("Known best score: {}", known_best_solution.score);
 
-        if let Some(solution) = solve_dfs(&game, args.depth) {
+        let (solution_opt, _iterations) = solve_dfs(&game, args.depth);
+        if let Some(solution) = solution_opt {
             // Store the best solution found so far and compared with the current solution
             // if the current solution is better, then update the best solution
             if solution.score >= known_best_solution.score {
