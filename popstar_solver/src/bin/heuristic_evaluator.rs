@@ -1,8 +1,7 @@
 use popstar_solver::engine::{Board, Game};
-use popstar_solver::strategies::{
+use popstar_solver::heuristics::{ // Corrected module path
     choose_move_crp,
     choose_move_lgp,
-    // Updated path
     choose_move_mis,
     choose_move_misps,
 };
@@ -13,8 +12,9 @@ const NUM_RANDOM_BOARDS_FOR_EVALUATION: usize = 20;
 const START_SEED: u64 = 0; // Changed to u64 to match Board::new_random_with_seed parameter type
 
 // Define a new trait for strategies to handle varying ScoreTypes
+// The choose_move functions now return a single coordinate pair (usize, usize)
 trait Strategy {
-    fn choose_move(&self, board: &Board) -> Option<Vec<(usize, usize)>>;
+    fn choose_move(&self, board: &Board) -> Option<(usize, usize)>; // Changed return type
     fn name(&self) -> &str;
 }
 
@@ -24,8 +24,8 @@ impl Strategy for MisStrategy {
     fn name(&self) -> &str {
         "MIS"
     }
-    fn choose_move(&self, board: &Board) -> Option<Vec<(usize, usize)>> {
-        choose_move_mis(board).map(|(_score, group)| group)
+    fn choose_move(&self, board: &Board) -> Option<(usize, usize)> { // Changed return type
+        choose_move_mis(board).map(|(_score, coord)| coord) // coord is now (usize, usize)
     }
 }
 
@@ -34,8 +34,8 @@ impl Strategy for LgpStrategy {
     fn name(&self) -> &str {
         "LGP"
     }
-    fn choose_move(&self, board: &Board) -> Option<Vec<(usize, usize)>> {
-        choose_move_lgp(board).map(|(_len, group)| group)
+    fn choose_move(&self, board: &Board) -> Option<(usize, usize)> { // Changed return type
+        choose_move_lgp(board).map(|(_len, coord)| coord) // coord is now (usize, usize)
     }
 }
 
@@ -44,8 +44,8 @@ impl Strategy for CrpStrategy {
     fn name(&self) -> &str {
         "CRP"
     }
-    fn choose_move(&self, board: &Board) -> Option<Vec<(usize, usize)>> {
-        choose_move_crp(board).map(|(_score_pair, group)| group)
+    fn choose_move(&self, board: &Board) -> Option<(usize, usize)> { // Changed return type
+        choose_move_crp(board).map(|(_score_pair, coord)| coord) // coord is now (usize, usize)
     }
 }
 
@@ -54,8 +54,8 @@ impl Strategy for MispsStrategy {
     fn name(&self) -> &str {
         "MISPS"
     }
-    fn choose_move(&self, board: &Board) -> Option<Vec<(usize, usize)>> {
-        choose_move_misps(board).map(|(_heuristic_val, group)| group)
+    fn choose_move(&self, board: &Board) -> Option<(usize, usize)> { // Changed return type
+        choose_move_misps(board).map(|(_heuristic_val, coord)| coord) // coord is now (usize, usize)
     }
 }
 
@@ -95,19 +95,18 @@ fn main() {
                 }
 
                 // Use the strategy to choose a move
-                if let Some(chosen_group_coords) = strategy.choose_move(game.board()) {
-                    if chosen_group_coords.is_empty() {
-                        eprintln!("Warning: Strategy {} returned an empty group on board {} (Seed: {}), but groups were expected to be available.", strategy_name, board_idx, current_seed);
-                        break;
-                    }
+                if let Some(chosen_coord) = strategy.choose_move(game.board()) {
+                    // chosen_coord is now Option<(usize, usize)> as per Strategy trait update
+                    // No need to check if chosen_coord.is_empty() as it's not a Vec.
+                    // The Option wrapping handles "no move".
 
-                    let (r_click, c_click) = chosen_group_coords[0]; // Get the first coord as the click point
+                    let (r_click, c_click) = chosen_coord; // chosen_coord is (usize, usize)
                     let move_successful = game.process_move(r_click, c_click);
 
                     if !move_successful {
                         eprintln!(
-                            "Error: Strategy {} on board {} (Seed: {}) failed to make a valid move with click point {:?} derived from group {:?}. Board state:\n{}",
-                            strategy_name, board_idx, current_seed, (r_click, c_click), chosen_group_coords, game.board()
+                            "Error: Strategy {} on board {} (Seed: {}) failed to make a valid move with click point {:?}. Board state:\n{}",
+                            strategy_name, board_idx, current_seed, (r_click, c_click), game.board()
                         );
                         break;
                     }

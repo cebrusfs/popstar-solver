@@ -71,7 +71,7 @@ impl Tile {
     }
 
     /// Returns the ANSI color code string for terminal output.
-    fn to_ansi_color_code(&self) -> &'static str {
+    fn to_ansi_color_code(self) -> &'static str {
         match self {
             Tile::Empty => "40",
             Tile::Red => "41",
@@ -128,6 +128,7 @@ impl Board {
         let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
         let mut rng = SmallRng::seed_from_u64(514514); // Use SmallRng for deterministic generation
 
+        #[allow(clippy::needless_range_loop)] // Indexed loop is clear for 2D array init
         for r in 0..BOARD_SIZE {
             for c in 0..BOARD_SIZE {
                 grid[r][c] = generate_random_tile_color(&mut rng); // Use new helper
@@ -151,6 +152,7 @@ impl Board {
         let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
         let mut rng = SmallRng::seed_from_u64(seed as u64); // Use SmallRng seeded with the provided value
 
+        #[allow(clippy::needless_range_loop)] // Indexed loop is clear for 2D array init
         for r in 0..BOARD_SIZE {
             for c in 0..BOARD_SIZE {
                 grid[r][c] = generate_random_tile_color(&mut rng); // Use new helper
@@ -233,6 +235,7 @@ impl Board {
     /// # Returns
     /// A `String` containing the formatted board representation suitable for terminal output.
     // NOTE: Naming reviewed: current name is clear.
+    // Reverted to pub as it's used by binaries.
     pub fn to_string_with_highlight(&self, pos: Option<(usize, usize)>) -> String {
         let mut output = String::new();
 
@@ -388,7 +391,8 @@ impl Board {
     ///
     /// # Panics
     /// Panics if any coordinate in `group` is out of bounds, due to `set_tile`.
-    pub fn eliminate_group(&mut self, group: &[(usize, usize)]) -> u32 {
+    // Changed from pub to pub(crate) to allow heuristics module to use it for simulation.
+    pub(crate) fn eliminate_group(&mut self, group: &[(usize, usize)]) -> u32 {
         if group.is_empty() {
             return 0;
         }
@@ -541,6 +545,12 @@ pub struct Game {
     current_score: u32,
     steps: u32,
     history: Vec<(Board, u32, u32)>, // Stores (board_state, score_at_state, steps_at_state) for undo
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Game {
@@ -1052,7 +1062,7 @@ mod tests {
             board_rows[BOARD_SIZE - 1] = "R........";
         }
         let mut board = board_from_str_array(&board_rows).unwrap();
-        let expected_grid = board.get_grid().clone();
+        let expected_grid = *board.get_grid();
         board.apply_gravity();
         assert_eq!(board.get_grid(), &expected_grid);
     }
@@ -1132,7 +1142,7 @@ mod tests {
     #[test]
     fn test_shift_columns_no_empty_columns() {
         let mut board = Board::new_random_with_seed(123);
-        let initial_state_grid = board.get_grid().clone();
+        let initial_state_grid = *board.get_grid();
         board.shift_columns();
         assert_eq!(board.get_grid(), &initial_state_grid);
     }
@@ -1140,7 +1150,7 @@ mod tests {
     #[test]
     fn test_shift_columns_all_empty() {
         let mut board = Board::new_empty();
-        let initial_state_grid = board.get_grid().clone();
+        let initial_state_grid = *board.get_grid();
         board.shift_columns();
         assert_eq!(board.get_grid(), &initial_state_grid);
     }
@@ -1185,7 +1195,7 @@ mod tests {
 
     #[test]
     fn test_calculate_bonus() {
-        let board_empty = board_from_str_array(&vec!["........."; BOARD_SIZE]).unwrap();
+        let board_empty = board_from_str_array(&["........."; BOARD_SIZE]).unwrap();
         assert_eq!(board_empty.calculate_bonus(), 2000);
 
         let mut board_one_tile_rows = vec!["........."; BOARD_SIZE];
@@ -1210,12 +1220,15 @@ mod tests {
         assert_eq!(board_ten_tiles.calculate_bonus(), 0);
 
         let mut eleven_tiles_rows = ["........."; BOARD_SIZE];
-        if BOARD_SIZE > 1 {
-            eleven_tiles_rows[0] = "RRRRRRRRRR";
-            eleven_tiles_rows[1] = "R........";
-        } else if BOARD_SIZE == 1 {
-            // only 10 tiles can fit
-            eleven_tiles_rows[0] = "RRRRRRRRRR";
+        match BOARD_SIZE {
+            0 => { /* No rows to modify, board will be empty */ }
+            1 => { // only 10 tiles can fit in one row representation
+                eleven_tiles_rows[0] = "RRRRRRRRRR";
+            }
+            _ => { // BOARD_SIZE > 1
+                eleven_tiles_rows[0] = "RRRRRRRRRR";
+                eleven_tiles_rows[1] = "R........";
+            }
         }
         let board_eleven_tiles = board_from_str_array(&eleven_tiles_rows).unwrap();
         // If BOARD_SIZE == 1, it's 10 tiles, bonus 0.
@@ -1445,7 +1458,7 @@ mod tests {
 
     #[test]
     fn test_is_game_over() {
-        let board_empty = board_from_str_array(&vec!["........."; BOARD_SIZE]).unwrap();
+        let board_empty = board_from_str_array(&["........."; BOARD_SIZE]).unwrap();
         let mut game = Game::new_with_board(board_empty.clone());
         assert!(game.is_game_over(), "Empty board should be game over");
 

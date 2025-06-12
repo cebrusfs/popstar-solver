@@ -78,6 +78,50 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 /// An `Option<Solution>` representing the best solution found from this state down to the
 /// allowed `depth_remaining`. Returns `None` if no valid solution path is found (though typically
 /// a solution representing the current state evaluated will be returned).
+///
+/// # Potential Performance Optimization (Future Refactoring)
+///
+/// This function currently takes `current_game_state: Game` by value and
+/// `current_moves_path: Vec<(usize, usize)>` by value. This means that for each recursive
+/// call, the `Game` state is cloned, and the `current_moves_path` vector is cloned.
+/// For deep search paths, this repeated cloning can be a significant performance bottleneck.
+///
+/// A potential optimization is to modify the function signature and internal logic:
+///
+/// 1.  **Change `current_game_state: Game` to `current_game_state: &mut Game`**:
+///     Instead of cloning the game state for each simulated move, a mutable reference
+///     to a single game state would be passed down the recursive call stack.
+///
+/// 2.  **Change `current_moves_path: Vec<(usize, usize)>` to `current_moves_path: &mut Vec<(usize, usize)>`**:
+///     Similarly, the path of moves taken would be passed as a mutable reference,
+///     avoiding clones of the vector at each step.
+///
+/// 3.  **Applying and Undoing Moves**:
+///     *   Before making a recursive call for a chosen move, `current_game_state.process_move(r, c)`
+///         would be called directly on the mutable game state.
+///     *   The chosen move `(r, c)` would be `push`ed onto `current_moves_path`.
+///     *   After the recursive call returns (i.e., that path has been explored), the game state
+///         must be reverted to its state before the move was made. This is crucial for backtracking.
+///         This would be achieved by calling a corresponding `current_game_state.undo_last_move()`
+///         method, which would need to be implemented in the `Game` engine to revert the
+///         board, score, and steps to their previous values.
+///     *   The move `(r, c)` would then be `pop`ped from `current_moves_path`.
+///
+/// 4.  **Visited States (`HashSet<Board>`)**:
+///     The `visited_states` set would still store `Board` objects (cloned from `current_game_state.board()`
+///     after a move is processed). This is generally acceptable as `Board` cloning might be less
+///     expensive than full `Game` state cloning, and `HashSet` requires owned values.
+///
+/// **Expected Benefits**:
+/// *   **Reduced Memory Allocation and Copying**: Significantly less time spent on cloning `Game`
+///     objects and `Vec`s.
+/// *   **Improved Performance**: Especially noticeable in deeper searches or on boards with many
+///     possible moves at each step.
+///
+/// This refactoring would make the DFS explore states by mutating a single `Game` instance
+/// along a path and then reversing those mutations during backtracking, which is a common
+/// pattern for efficient DFS implementations.
+///
 fn find_best_solution_recursive(
     current_game_state: Game,
     depth_remaining: u32,
@@ -202,9 +246,9 @@ fn find_best_solution_recursive(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::count_truly_isolated_tiles;
+    use crate::heuristics::count_truly_isolated_tiles; // Corrected path
     use crate::engine::{Game, Tile}; // BOARD_SIZE removed
-    // Removed local board_from_str_array and board_from_minimal_str_array
+                                     // Removed local board_from_str_array and board_from_minimal_str_array
 
     #[test]
     fn test_count_truly_isolated_tiles_none_isolated() {
@@ -300,6 +344,53 @@ mod tests {
             nodes_explored_depth_zero, 1,
             "For 'RR' and depth 0, expected 1 node explored. Got {}",
             nodes_explored_depth_zero
+        );
+    }
+
+    #[test]
+    fn test_solve_dfs_simple_one_move_max() {
+        // Create a simple board that is not immediately game-over, to ensure
+        // evaluate_with_heuristic has something to work on.
+        let board_str = [
+            "RRR......", // A group of 3 Red
+            "G.G......", // Two non-adjacent Green
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+        ];
+        let board = crate::utils::board_from_str_array(&board_str).unwrap();
+        let initial_game = Game::new_with_board(board);
+        let depth_limit = 0;
+
+        // Expected score when depth_limit is 0 is the heuristic evaluation of the initial state.
+        let expected_score = evaluate_with_heuristic(initial_game.clone());
+
+        let (solution_opt, nodes_explored) = solve_dfs(&initial_game, depth_limit);
+
+        assert!(solution_opt.is_some(), "Solution should be Some");
+        let solution = solution_opt.unwrap();
+
+        assert_eq!(
+            solution.score, expected_score,
+            "Score at depth 0 should be the heuristic evaluation of the initial state"
+        );
+        assert!(
+            solution.moves.is_empty(),
+            "Moves should be empty for depth 0 search from initial state"
+        );
+        assert_eq!(
+            solution.steps_taken,
+            initial_game.steps(), // Should be 0 for a fresh game
+            "Steps taken should be initial game steps (0) for depth 0 search"
+        );
+        assert_eq!(
+            nodes_explored, 1,
+            "Nodes explored should be 1 for depth 0 search"
         );
     }
 }

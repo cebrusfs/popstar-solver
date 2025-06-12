@@ -23,17 +23,6 @@ pub mod heuristics;
 pub mod solver;
 pub mod utils;
 
-// Re-export key items for easier access from library users (e.g., binaries).
-// The documentation for these items is primarily located in their respective source modules.
-
-/// Contains different heuristic strategies for choosing moves.
-pub mod strategies {
-    pub use crate::heuristics::{
-        choose_move_crp, choose_move_lgp, choose_move_mis, choose_move_misps,
-    };
-}
-
-// Re-export other potentially useful heuristic-related public functions
-pub use crate::heuristics::{
-    count_truly_isolated_tiles, count_unique_colors, evaluate_with_heuristic,
-};
+// Items from sub-modules like `heuristics`, `engine`, etc., if public,
+// should be accessed via their full path, e.g., `popstar_solver::heuristics::choose_move_mis()`.
+// This keeps the top-level library namespace cleaner.

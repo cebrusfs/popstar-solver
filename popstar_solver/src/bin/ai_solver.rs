@@ -44,17 +44,15 @@ fn read_board_file(path: &PathBuf) -> Result<Game, String> {
 
     board_from_str_array(&lines)
         .map_err(|e| format!("Invalid board format: {}", e))
-        .map(|board| Game::new_with_board(board))
+        .map(Game::new_with_board)
 }
 
 fn main() {
     let args = Args::parse();
     println!("Searching for solution with depth limit {}...", args.depth);
 
-    let mut game = read_board_file(&args.board_file).expect(&format!(
-        "Failed to read board from file: {}",
-        args.board_file.display()
-    ));
+    let mut game = read_board_file(&args.board_file).unwrap_or_else(|_| panic!("Failed to read board from file: {}",
+        args.board_file.display()));
     println!("Loaded board from {}", args.board_file.display());
     println!("{}", game.board());
 
@@ -81,7 +79,7 @@ fn main() {
 
             game.process_move(best_move.0, best_move.1);
             println!("Score: --> {}", game.score());
-            println!("");
+            println!();
         } else {
             println!("No solution found.");
             break;
