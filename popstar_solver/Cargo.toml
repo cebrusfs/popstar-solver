@@ -16,3 +16,6 @@ path = "src/bin/human_player.rs"
 name = "ai_solver"
 path = "src/bin/ai_solver.rs"
 
+[[bin]]
+name = "heuristic_evaluator"
+path = "src/bin/heuristic_evaluator.rs"

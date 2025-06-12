@@ -1,5 +1,10 @@
-use crate::engine::{Board, Game, Tile, BOARD_SIZE}; // Add Tile and BOARD_SIZE here
-use std::collections::{BinaryHeap, HashMap, HashSet}; // Add HashMap and BinaryHeap here
+use crate::engine::{Board, Game};
+use std::collections::HashSet;
+
+// Re-export the heuristic functions for backward compatibility
+pub use crate::heuristics::{
+    evaluate_with_heuristic
+};
 
 /// Represents a solution found by the solver.
 #[derive(Clone, Debug)]
@@ -11,190 +16,6 @@ pub struct Solution {
     /// The number of moves (eliminations) performed by the solver to reach this solution.
     /// This corresponds to the `steps` in the `Game` struct.
     pub steps_taken: u32,
-}
-
-#[derive(Clone, Debug)]
-struct AStarNode {
-    game_state: Game,
-    moves: Vec<(usize, usize)>,
-    g_score: u32,
-    f_score: i64,
-}
-
-// Helper function to count tiles that cannot form a group of 2 or more
-fn count_truly_isolated_tiles(board: &Board) -> u32 {
-    let mut isolated_count = 0;
-    // visited_for_groups tracks tiles that are part of any group of size >= 2
-    let mut visited_for_groups = [[false; BOARD_SIZE]; BOARD_SIZE];
-
-    // Mark all tiles that belong to valid groups
-    for r_idx in 0..BOARD_SIZE {
-        for c_idx in 0..BOARD_SIZE {
-            if !visited_for_groups[r_idx][c_idx] && board.get_tile(r_idx, c_idx) != Tile::Empty {
-                // find_group will return an empty vec if the tile at (r_idx, c_idx)
-                // alone doesn't form a group of >= 2.
-                // Or it returns the group members.
-                let group = board.find_group(r_idx, c_idx);
-                if !group.is_empty() { // group.len() >= 2 implicitly by find_group contract
-                    for &(gr, gc) in &group {
-                        visited_for_groups[gr][gc] = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // Count non-empty tiles that were not part of any valid group
-    for r_idx in 0..BOARD_SIZE {
-        for c_idx in 0..BOARD_SIZE {
-            if !visited_for_groups[r_idx][c_idx] && board.get_tile(r_idx, c_idx) != Tile::Empty {
-                isolated_count += 1;
-            }
-        }
-    }
-    isolated_count
-}
-
-impl Ord for AStarNode {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.f_score.cmp(&self.f_score)
-    }
-}
-
-impl PartialOrd for AStarNode {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Eq for AStarNode {}
-
-impl PartialEq for AStarNode {
-    fn eq(&self, other: &Self) -> bool {
-        self.f_score == other.f_score && self.g_score == other.g_score
-    }
-}
-
-// Placed before solve_a_star, uses evaluate_with_heuristic from the same module.
-
-// New constant for the penalty factor
-const ISOLATED_TILE_PENALTY_FACTOR: u32 = 10; // Value can be tuned
-
-fn calculate_heuristic_a_star(game_state: &Game) -> u32 {
-    let mut temp_game_for_heuristic = game_state.clone();
-    let estimated_total_score_from_this_state = evaluate_with_heuristic(temp_game_for_heuristic);
-
-    let base_future_score = if estimated_total_score_from_this_state >= game_state.score() {
-        estimated_total_score_from_this_state - game_state.score()
-    } else {
-        0
-    };
-
-    let num_isolated = count_truly_isolated_tiles(game_state.board());
-    let penalty = num_isolated * ISOLATED_TILE_PENALTY_FACTOR;
-
-    // Apply penalty, ensuring heuristic doesn't go below zero
-    if base_future_score >= penalty {
-        base_future_score - penalty
-    } else {
-        0
-    }
-}
-
-pub fn solve_a_star(initial_game: &Game, iteration_limit: u32) -> (Option<Solution>, u32) { // Changed return type
-    let mut open_set = BinaryHeap::new();
-    let mut closed_set: HashMap<Board, u32> = HashMap::new();
-
-    let initial_h_score = calculate_heuristic_a_star(initial_game);
-    let initial_g_score = initial_game.score();
-
-    open_set.push(AStarNode {
-        game_state: initial_game.clone(),
-        moves: Vec::new(),
-        g_score: initial_g_score,
-        f_score: -((initial_g_score + initial_h_score) as i64),
-    });
-
-    let mut best_solution_if_game_over: Option<Solution> = None;
-    let mut iterations_count: u32 = 0; // Renamed from 'iterations'
-
-    while let Some(current_node) = open_set.pop() {
-        iterations_count += 1;
-        if iteration_limit > 0 && iterations_count > iteration_limit {
-            break;
-        }
-
-        let current_board = current_node.game_state.board().clone();
-        let current_g_score = current_node.g_score;
-
-        if let Some(&existing_best_g_score) = closed_set.get(&current_board) {
-            if current_g_score <= existing_best_g_score {
-                continue;
-            }
-        }
-        closed_set.insert(current_board.clone(), current_g_score);
-
-        if current_node.game_state.is_game_over() {
-            let final_score_at_game_over = current_node.game_state.final_score();
-            if best_solution_if_game_over.is_none() || final_score_at_game_over > best_solution_if_game_over.as_ref().unwrap().score {
-                best_solution_if_game_over = Some(Solution {
-                    moves: current_node.moves.clone(),
-                    score: final_score_at_game_over,
-                    steps_taken: current_node.game_state.steps(),
-                });
-            }
-            continue;
-        }
-
-        let available_groups = current_node.game_state.board().find_all_groups();
-
-        if available_groups.is_empty() {
-             let final_score_at_no_moves = current_node.game_state.final_score();
-             if best_solution_if_game_over.is_none() || final_score_at_no_moves > best_solution_if_game_over.as_ref().unwrap().score {
-                best_solution_if_game_over = Some(Solution {
-                    moves: current_node.moves.clone(),
-                    score: final_score_at_no_moves,
-                    steps_taken: current_node.game_state.steps(),
-                });
-            }
-            continue;
-        }
-
-        for group_to_eliminate in available_groups {
-            if group_to_eliminate.is_empty() { continue; }
-            let (r_click, c_click) = group_to_eliminate[0];
-            let mut neighbor_game_state = current_node.game_state.clone();
-            let move_was_valid = neighbor_game_state.process_move(r_click, c_click);
-
-            if !move_was_valid {
-                // eprintln!("Warning: A* found a group that process_move deemed invalid."); // Silencing for now
-                continue;
-            }
-
-            let neighbor_board_key = neighbor_game_state.board().clone();
-            let tentative_neighbor_g_score = neighbor_game_state.score();
-
-            if let Some(&existing_g_score_for_neighbor) = closed_set.get(&neighbor_board_key) {
-                if tentative_neighbor_g_score <= existing_g_score_for_neighbor {
-                    continue;
-                }
-            }
-
-            let neighbor_h_score = calculate_heuristic_a_star(&neighbor_game_state);
-            let neighbor_f_score_val = tentative_neighbor_g_score + neighbor_h_score;
-            let mut new_moves_path = current_node.moves.clone();
-            new_moves_path.push((r_click, c_click));
-
-            open_set.push(AStarNode {
-                game_state: neighbor_game_state,
-                moves: new_moves_path,
-                g_score: tentative_neighbor_g_score,
-                f_score: -(neighbor_f_score_val as i64),
-            });
-        }
-    }
-    // Loop finished (open_set empty or iteration_limit reached)
-    (best_solution_if_game_over, iterations_count) // Return tuple
 }
 
 /// Solves the PopStar game using DFS up to the specified depth limit.
@@ -339,62 +160,42 @@ fn find_best_solution_recursive(
     best_solution_found
 }
 
-fn evaluate_with_heuristic(mut game_state: Game) -> u32 {
-
-    while !game_state.is_game_over() {
-        let available_moves_coords = game_state.board().find_all_groups();
-
-        if available_moves_coords.is_empty() {
-            break;
-        }
-
-        let mut best_move_coord: Option<(usize, usize)> = None;
-        let mut max_immediate_score = 0;
-
-        for group in &available_moves_coords {
-
-            let n = group.len() as u32;
-            let immediate_score = n * n * 5;
-
-            if immediate_score > max_immediate_score {
-                max_immediate_score = immediate_score;
-                best_move_coord = Some(group[0]);
-            }
-        }
-
-        if let Some((r_best, c_best)) = best_move_coord {
-            game_state.process_move(r_best, c_best);
-        } else {
-            break;
-        }
-    }
-    game_state.final_score()
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::board_from_str_array;
-    use crate::engine::{Tile, BOARD_SIZE as ENGINE_BOARD_SIZE}; // Renamed to avoid conflict with helper
+    use crate::engine::{Board, Game, Tile, BOARD_SIZE};
+    use crate::count_truly_isolated_tiles;
+    
+    // Helper function to create a board from a minimal string array
+    fn board_from_str_array(rows: &[&str]) -> Board {
+        use crate::engine::Tile::*;
+        
+        let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
+        
+        for (r, &row) in rows.iter().enumerate() {
+            if r >= BOARD_SIZE { break; }
+            
+            for (c, ch) in row.chars().enumerate() {
+                if c >= BOARD_SIZE { break; }
+                
+                let tile = match ch.to_ascii_uppercase() {
+                    'R' => Red,
+                    'G' => Green,
+                    'B' => Blue,
+                    'Y' => Yellow,
+                    'P' => Purple,
+                    _ => Empty,
+                };
+                grid[r][c] = tile;
+            }
+        }
+        
+        Board::from_grid(grid)
+    }
 
     // Helper function for test board creation
     fn board_from_minimal_str_array(test_rows: &[&str]) -> Board {
-        // Use ENGINE_BOARD_SIZE to refer to the constant from crate::engine
-        let mut full_rows_data = Vec::new();
-        for r_idx in 0..ENGINE_BOARD_SIZE {
-            if r_idx < test_rows.len() {
-                let mut row_str = test_rows[r_idx].to_string();
-                while row_str.len() < ENGINE_BOARD_SIZE {
-                    row_str.push('.'); // Pad columns
-                }
-                full_rows_data.push(row_str);
-            } else {
-                full_rows_data.push(".".repeat(ENGINE_BOARD_SIZE)); // Pad rows
-            }
-        }
-        let final_row_strs: Vec<&str> = full_rows_data.iter().map(AsRef::as_ref).collect();
-        board_from_str_array(&final_row_strs).expect("Failed to create board from minimal str array for test")
+        board_from_str_array(test_rows)
     }
 
 
@@ -434,161 +235,7 @@ mod tests {
         assert_eq!(count_truly_isolated_tiles(&board), 0);
     }
 
-    #[test]
-    fn test_calculate_heuristic_a_star_game_over() {
-        let board = board_from_minimal_str_array(&["RGYB"]); // 4 tiles, all isolated
-        let game = Game::new_with_board(board.clone());
-        assert!(game.is_game_over());
 
-        let expected_bonus = board.calculate_bonus();
-        let num_isolated = count_truly_isolated_tiles(&board); // Should be 4
-        assert_eq!(num_isolated, 4); // Verify assumption
-        let expected_penalty = num_isolated * ISOLATED_TILE_PENALTY_FACTOR;
-
-        let expected_h_score = if expected_bonus >= expected_penalty {
-            expected_bonus - expected_penalty
-        } else {
-            0
-        };
-        assert_eq!(calculate_heuristic_a_star(&game), expected_h_score);
-    }
-
-    #[test]
-    fn test_calculate_heuristic_a_star_with_penalty() {
-        // Board with one group and one isolated tile
-        // RR is a group. B is isolated.
-        let board = board_from_minimal_str_array(&["RRB"]);
-        let game = Game::new_with_board(board);
-
-        let expected_h_score_without_penalty: u32 = {
-            let mut temp_g = game.clone();
-            let total_greedy_score = evaluate_with_heuristic(temp_g); // This is total score from state
-            if total_greedy_score >= game.score() {
-                total_greedy_score - game.score() // This is future score
-            } else {
-                0
-            }
-        };
-        let num_isolated = count_truly_isolated_tiles(game.board()); // Should be 1 for B
-        assert_eq!(num_isolated, 1, "Expected 1 isolated tile (B)");
-        let expected_penalty = num_isolated * ISOLATED_TILE_PENALTY_FACTOR;
-
-        let final_expected_h = if expected_h_score_without_penalty >= expected_penalty {
-            expected_h_score_without_penalty - expected_penalty
-        } else {
-            0
-        };
-
-        assert_eq!(calculate_heuristic_a_star(&game), final_expected_h);
-    }
-
-    #[test]
-    fn test_solve_a_star_already_game_over() {
-        let board = board_from_minimal_str_array(&["RGYB"]); // No groups
-        let game = Game::new_with_board(board.clone());
-        assert!(game.is_game_over());
-
-        let (solution_opt, nodes_explored) = solve_a_star(&game, 100); // Small iteration limit
-        assert!(nodes_explored >= 1, "Should explore at least the initial node");
-        assert!(solution_opt.is_some());
-        let sol = solution_opt.unwrap();
-        assert!(sol.moves.is_empty());
-        assert_eq!(sol.score, game.final_score());
-        assert_eq!(sol.steps_taken, 0);
-    }
-
-    #[test]
-    fn test_solve_a_star_simple_one_move() {
-        let board = board_from_minimal_str_array(&["RR"]);
-        let game = Game::new_with_board(board);
-
-        let (solution_opt, nodes_explored) = solve_a_star(&game, 1000);
-        // println!("Simple one move A* nodes: {}", nodes_explored);
-        assert!(solution_opt.is_some(), "Solution not found for simple one move board");
-        let sol = solution_opt.unwrap();
-
-        assert_eq!(sol.moves.len(), 1, "Expected one move");
-        assert!(
-            sol.moves[0] == (0, 0) || sol.moves[0] == (0, 1),
-            "Expected move to be (0,0) or (0,1)"
-        );
-
-        let mut temp_game = game.clone();
-        temp_game.process_move(sol.moves[0].0, sol.moves[0].1);
-        assert_eq!(
-            sol.score,
-            temp_game.final_score(),
-            "Score mismatch for one simple move. Expected 2020."
-        );
-        assert!(temp_game.is_game_over(), "Game should be over after the move");
-    }
-
-    #[test]
-    fn test_solve_a_star_optimal_complex() {
-        let board = board_from_minimal_str_array(&["RGYB....", "RGYB....", "BBGGRRYY"]);
-        let game = Game::new_with_board(board);
-
-        let (solution_opt, nodes_explored) = solve_a_star(&game, 20000);
-        // println!("Optimal complex A* nodes: {}", nodes_explored);
-        assert!(solution_opt.is_some(), "Solution not found for moderately complex board");
-        let sol = solution_opt.unwrap();
-        assert_eq!(
-            sol.score, 2160,
-            "Did not find optimal score for the complex board. Got {}",
-            sol.score
-        );
-        assert_eq!(sol.steps_taken, 8, "Should take 8 steps to clear");
-
-        let mut sim_game = game.clone();
-        for &(r, c) in &sol.moves {
-            assert!(
-                sim_game.process_move(r, c),
-                "A* suggested an invalid move sequence: ({},{}) on board:\n{}",
-                r,
-                c,
-                sim_game.board()
-            );
-        }
-        assert_eq!(
-            sim_game.final_score(),
-            sol.score,
-            "A* solution moves do not lead to reported score"
-        );
-        assert!(sim_game.is_game_over(), "Game not over after A* solution moves");
-    }
-
-    #[test]
-    fn test_solve_a_star_iteration_limit() {
-        let board_over = board_from_minimal_str_array(&["RGYBM"]);
-        let game_over = Game::new_with_board(board_over.clone());
-        assert!(game_over.is_game_over());
-
-        let (sol_opt_0, nodes_0) = solve_a_star(&game_over, 0);
-        assert!(sol_opt_0.is_some());
-        assert_eq!(sol_opt_0.unwrap().score, game_over.final_score());
-        assert!(nodes_0 >= 1);
-
-
-        let (sol_opt_1, nodes_1) = solve_a_star(&game_over, 1);
-        assert!(sol_opt_1.is_some());
-        assert_eq!(sol_opt_1.unwrap().score, game_over.final_score());
-        assert_eq!(nodes_1, 1, "Expected 1 node for game over with limit 1");
-
-
-        let board_needs_search = board_from_minimal_str_array(&["RRR", "GGG", "BBB"]);
-        let game_needs_search = Game::new_with_board(board_needs_search);
-
-        let (sol_low_iter_opt, nodes_low) = solve_a_star(&game_needs_search, 2);
-        // println!("Low iter A* nodes: {}", nodes_low);
-        assert!(sol_low_iter_opt.is_none(), "Expected None for very low iteration limit not reaching game over, but got a solution.");
-        assert_eq!(nodes_low, 2, "Should stop after 2 iterations");
-
-
-        let (sol_enough_iter_opt, nodes_enough) = solve_a_star(&game_needs_search, 1000);
-        // println!("Enough iter A* nodes: {}", nodes_enough);
-        assert!(sol_enough_iter_opt.is_some(), "Solution not found with presumed enough iterations");
-        assert_eq!(sol_enough_iter_opt.unwrap().score, 2135, "Score mismatch for 3-group board");
-    }
 
     #[test]
     fn test_solve_dfs_nodes_explored() {
