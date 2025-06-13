@@ -701,7 +701,29 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::board_from_str_array;
+    use crate::utils::board_from_str_array; // Assuming this utility is available and public for tests
+
+    // Helper function to create a predictable board for testing undo scenarios.
+    // R R . .
+    // G G . .
+    // B B Y .
+    // P P Y .
+    // . . . .
+    fn create_predictable_board_for_undo_tests() -> Board {
+        let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
+        if BOARD_SIZE >= 4 {
+            grid[0][0] = Tile::Red; grid[0][1] = Tile::Red;
+            grid[1][0] = Tile::Green; grid[1][1] = Tile::Green;
+            grid[2][0] = Tile::Blue; grid[2][1] = Tile::Blue; grid[2][2] = Tile::Yellow;
+            grid[3][0] = Tile::Purple; grid[3][1] = Tile::Purple; grid[3][2] = Tile::Yellow;
+        } else if BOARD_SIZE >= 2 { // Fallback for smaller boards, less complex
+            grid[0][0] = Tile::Red; grid[0][1] = Tile::Red;
+            grid[1][0] = Tile::Green; grid[1][1] = Tile::Green;
+        }
+        // For very small boards (BOARD_SIZE < 2), it might remain mostly empty or only have one group.
+        Board { grid }
+    }
+
 
     #[test]
     fn test_new_empty_board() {
@@ -1518,5 +1540,212 @@ mod tests {
             50,
             "Final score with zero bonus incorrect"
         );
+    }
+
+    #[test]
+    fn test_undo_single_move() {
+        let initial_board = create_predictable_board_for_undo_tests();
+        let mut game = Game::new_with_board(initial_board.clone());
+
+        let initial_score = game.score();
+        let initial_steps = game.steps();
+        let initial_board_grid = game.board().get_grid().clone();
+        let history_len_before_move = game.history.len();
+
+        // Process a valid move (Red group at (0,0))
+        let move_processed = game.process_move(0, 0);
+        assert!(move_processed, "Move should have been processed");
+
+        // Assert that the board, score, or steps have changed.
+        let score_after_move = game.score();
+        let steps_after_move = game.steps();
+        let board_grid_after_move = game.board().get_grid().clone();
+
+        assert_ne!(initial_score, score_after_move, "Score should change after a move");
+        assert_ne!(initial_steps, steps_after_move, "Steps should change after a move");
+        assert_ne!(initial_board_grid, board_grid_after_move, "Board should change after a move");
+        assert_eq!(game.history.len(), history_len_before_move + 1, "History length should increment after move");
+
+        // Call undo_last_move()
+        let undo_result = game.undo_last_move();
+        assert!(undo_result, "undo_last_move should return true");
+
+        // Assert that the board, score, and steps are restored to their initial values.
+        assert_eq!(game.score(), initial_score, "Score not restored after undo");
+        assert_eq!(game.steps(), initial_steps, "Steps not restored after undo");
+        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board not restored after undo");
+        assert_eq!(game.history.len(), history_len_before_move, "History length not restored after undo");
+    }
+
+    #[test]
+    fn test_undo_multiple_moves() {
+        let board_s0 = create_predictable_board_for_undo_tests();
+        let mut game = Game::new_with_board(board_s0.clone());
+
+        let score_s0 = game.score();
+        let steps_s0 = game.steps();
+        let history_len_s0 = game.history.len();
+
+        // Move 1 (Red group at (0,0))
+        assert!(game.process_move(0, 0), "Move 1 failed");
+        let board_s1 = game.board().clone();
+        let score_s1 = game.score();
+        let steps_s1 = game.steps();
+        let history_len_s1 = game.history.len();
+        assert_ne!(score_s0, score_s1, "Score should change after move 1");
+
+
+        // Move 2 (Green group at (1,0) in original S0, but might be elsewhere after M1 gravity)
+        // Find where Green group is now to make a valid second move.
+        // For predictable_board_for_undo_tests, after RR at (0,0) is removed, GG at (1,0) will fall.
+        // If BOARD_SIZE is large enough, it will be at (BOARD_SIZE-1, 0) or near.
+        // Let's assume it's findable by its original coordinates if gravity didn't move it out of (1,0)
+        // or simply use find_all_groups. For this test, let's use a coordinate we expect to be valid.
+        // After (0,0) Red is removed, (1,0) Green falls. On a 10x10 board, (1,0) Green falls to (9,0).
+        // The group (originally at (1,0)-(1,1)) will be at (9,0)-(9,1) if BOARD_SIZE >=2
+        let (g_r, g_c) = if BOARD_SIZE >=2 {(game.board().get_grid().len() -1, 0)} else {(1,0)};
+        let move2_processed = game.process_move(g_r, g_c); // Click where Green group likely is
+        assert!(move2_processed, "Move 2 (Green) failed. Board:\n{}", game.board());
+
+
+        let history_len_s2 = game.history.len();
+        assert_ne!(score_s1, game.score(), "Score should change after move 2");
+
+        // Call undo_last_move() once (undo Move 2)
+        assert!(game.undo_last_move(), "Undo of Move 2 failed");
+        assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undoing M2");
+        assert_eq!(game.score(), score_s1, "Score not S1 after undoing M2");
+        assert_eq!(game.steps(), steps_s1, "Steps not S1 after undoing M2");
+        assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undoing M2");
+
+        // Call undo_last_move() again (undo Move 1)
+        assert!(game.undo_last_move(), "Undo of Move 1 failed");
+        assert_eq!(game.board().get_grid(), board_s0.get_grid(), "Board not S0 after undoing M1");
+        assert_eq!(game.score(), score_s0, "Score not S0 after undoing M1");
+        assert_eq!(game.steps(), steps_s0, "Steps not S0 after undoing M1");
+        assert_eq!(game.history.len(), history_len_s0, "History len not S0 after undoing M1");
+    }
+
+    #[test]
+    fn test_undo_to_initial_state() {
+        let initial_board = create_predictable_board_for_undo_tests();
+        let mut game = Game::new_with_board(initial_board.clone());
+        let initial_score = game.score();
+        let initial_steps = game.steps();
+
+        // Make several moves
+        if BOARD_SIZE >= 4 { // Ensure enough groups for multiple moves
+            assert!(game.process_move(0, 0), "Move A failed"); // Red
+            let (g_r, g_c) = (game.board().get_grid().len() -1, 0); // Green likely fell here
+            assert!(game.process_move(g_r, g_c), "Move B failed"); // Green
+            let (b_r, b_c) = (game.board().get_grid().len() -2, 0); // Blue likely fell here
+            assert!(game.process_move(b_r, b_c), "Move C failed"); // Blue
+        } else if BOARD_SIZE >=2 {
+             assert!(game.process_move(0,0), "Move A failed on small board");
+        }
+        // else no moves possible on tiny board, test won't do much but won't fail.
+
+        let num_moves_made = game.steps() - initial_steps;
+        if num_moves_made == 0 && BOARD_SIZE >= 2 { // Should have made moves if board is big enough
+            panic!("No moves were made in test_undo_to_initial_state on a board that should support them.")
+        }
+
+
+        // Repeatedly call undo_last_move()
+        let mut undo_count = 0;
+        while game.history.len() > 1 {
+            assert!(game.undo_last_move(), "Undo should succeed while history > 1");
+            undo_count += 1;
+        }
+
+        assert_eq!(undo_count, num_moves_made, "Number of successful undos should match moves made");
+
+        // Assert that the current game state is identical to the initial game state.
+        assert_eq!(game.board().get_grid(), initial_board.get_grid(), "Board not restored to initial");
+        assert_eq!(game.score(), initial_score, "Score not restored to initial");
+        assert_eq!(game.steps(), initial_steps, "Steps not restored to initial");
+        assert_eq!(game.history.len(), 1, "History should contain only the initial state");
+
+        // One more undo should fail
+        assert!(!game.undo_last_move(), "Undo should fail when only initial state is left");
+    }
+
+    #[test]
+    fn test_undo_on_new_game() {
+        let initial_board = create_predictable_board_for_undo_tests();
+        let mut game = Game::new_with_board(initial_board.clone());
+
+        let initial_score = game.score();
+        let initial_steps = game.steps();
+        let initial_board_grid = game.board().get_grid().clone();
+        let initial_history_len = game.history.len();
+
+        // Call undo_last_move()
+        let undo_result = game.undo_last_move();
+        assert!(!undo_result, "undo_last_move should return false on a new game");
+
+        // Assert the game state is still the initial state.
+        assert_eq!(game.score(), initial_score, "Score changed after failed undo");
+        assert_eq!(game.steps(), initial_steps, "Steps changed after failed undo");
+        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board changed after failed undo");
+        assert_eq!(game.history.len(), initial_history_len, "History length changed after failed undo");
+    }
+
+    #[test]
+    fn test_move_after_undo() {
+        let board_s0 = create_predictable_board_for_undo_tests();
+        let mut game = Game::new_with_board(board_s0.clone());
+
+        // Make move M1 (Red group at (0,0))
+        assert!(game.process_move(0, 0), "Move M1 failed");
+        let board_s1 = game.board().clone();
+        let score_s1 = game.score();
+        let steps_s1 = game.steps();
+        let history_len_s1 = game.history.len();
+
+        // Make move M2 (Green group, assuming it falls to (bottom, 0) if BOARD_SIZE >= 2)
+        let (g_r, g_c) = if BOARD_SIZE >=2 {(game.board().get_grid().len() -1, 0)} else {(1,0)};
+        let m2_processed = game.process_move(g_r, g_c);
+        if BOARD_SIZE >= 2 { // Only assert if we expect M2 to be possible
+            assert!(m2_processed, "Move M2 failed. Board:\n{}", game.board());
+        }
+
+        if m2_processed { // If M2 was actually made
+            let board_s2 = game.board().clone();
+            let score_s2 = game.score();
+            let steps_s2 = game.steps();
+            let history_len_s2 = game.history.len();
+
+            // Undo M2
+            assert!(game.undo_last_move(), "Undo of M2 failed");
+            assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undo");
+            assert_eq!(game.score(), score_s1, "Score not S1 after undo");
+            assert_eq!(game.steps(), steps_s1, "Steps not S1 after undo");
+            assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undo");
+
+            // Make move M2 again (or a different move M3 from S1)
+            // Let's try M2 again
+            let m2_again_processed = game.process_move(g_r, g_c);
+            assert!(m2_again_processed, "Move M2 (again) failed after undo. Board:\n{}", game.board());
+
+            assert_eq!(game.board().get_grid(), board_s2.get_grid(), "Board not S2 after M2 (again)");
+            assert_eq!(game.score(), score_s2, "Score not S2 after M2 (again)");
+            assert_eq!(game.steps(), steps_s2, "Steps not S2 after M2 (again)");
+            assert_eq!(game.history.len(), history_len_s2, "History len not S2 after M2 (again)");
+
+            // Test with a different move M3 (Blue group, assuming it falls to (bottom-1,0) if BOARD_SIZE >=4)
+            assert!(game.undo_last_move(), "Undo M2 (again) failed"); // Back to S1
+
+            if BOARD_SIZE >=4 {
+                let (b_r, b_c) = (game.board().get_grid().len() -2, 0);
+                assert!(game.process_move(b_r, b_c), "Move M3 (Blue) failed. Board:\n{}", game.board());
+                assert_ne!(game.score(), score_s2, "Score for M3 should be different from M2's score");
+                assert_ne!(game.board().get_grid(), board_s2.get_grid(), "Board for M3 should be different from S2");
+                assert_eq!(game.history.len(), history_len_s2, "History len for M3 should be same depth as S2");
+            }
+        } else if BOARD_SIZE >= 2 {
+             // If M2 was not processed on a board that should support it, it's an issue with test setup
+             panic!("Move M2 was unexpectedly not processed on a board of size {}", BOARD_SIZE);
+        }
     }
 }

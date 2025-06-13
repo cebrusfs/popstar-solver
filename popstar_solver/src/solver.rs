@@ -1,5 +1,5 @@
 use crate::engine::{Board, Game};
-use std::collections::HashSet;
+use std::collections::HashMap; // Changed from HashSet to HashMap
 
 // Re-export the heuristic functions for backward compatibility
 pub use crate::heuristics::evaluate_with_heuristic;
@@ -46,8 +46,10 @@ pub struct Solution {
 /// are cut off by the depth limit, allowing the DFS to still make decisions based on these
 /// potentially incomplete game plays.
 pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u32) {
-    let mut visited_states = HashSet::new(); // Stores board states to avoid re-exploring identical configurations.
-    visited_states.insert(initial_game.board().clone());
+    let mut visited_states = HashMap::new(); // Changed from HashSet to HashMap
+    // Insert the initial state with its current score.
+    // The score for the initial state is initial_game.score() (usually 0).
+    visited_states.insert(initial_game.board().clone(), initial_game.score());
 
     let mut nodes_explored_dfs: u32 = 0;
     let mut game_instance = initial_game.clone();
@@ -69,8 +71,8 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 /// # Arguments
 /// * `current_game_state`: The current `Game` state being evaluated.
 /// * `depth_remaining`: How many more moves (depth) can be explored from this state.
-/// * `visited_states`: A mutable reference to a `HashSet` storing `Board` configurations that
-///   have already been visited in the current DFS path to prevent cycles and redundant work.
+/// * `visited_states`: A mutable reference to a `HashMap` storing `Board` configurations as keys
+///   and the maximum score achieved to reach that board state as values.
 /// * `current_moves_path`: A `Vec` accumulating the sequence of moves taken to reach the
 ///   `current_game_state`.
 /// * `nodes_explored`: A mutable reference to a counter for the total number of states explored.
@@ -83,7 +85,7 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 fn find_best_solution_recursive(
     current_game_state: &mut Game,
     depth_remaining: u32,
-    visited_states: &mut HashSet<Board>,
+    visited_states: &mut HashMap<Board, u32>, // Changed type from HashSet<Board>
     current_moves_path: &mut Vec<(usize, usize)>,
     nodes_explored: &mut u32,
 ) -> Option<Solution> {
@@ -142,10 +144,30 @@ fn find_best_solution_recursive(
 
         // Clone the board state *after* the move for checks and visited set.
         let board_after_move = current_game_state.board().clone();
+        let current_score_at_board = current_game_state.score();
 
-        if !visited_states.contains(&board_after_move) {
-            // If this new state S' has not been visited, mark it and recurse.
-            visited_states.insert(board_after_move); // Add S' to visited_states
+        let mut should_recurse = false;
+        match visited_states.get(&board_after_move) {
+            Some(&previous_max_score) => {
+                if current_score_at_board > previous_max_score {
+                    // This path reached the same board state with a better score
+                    visited_states.insert(board_after_move.clone(), current_score_at_board);
+                    should_recurse = true;
+                } else {
+                    // This path is worse or equal, prune it.
+                    // Undo the move before skipping to the next group.
+                    current_game_state.undo_last_move();
+                    continue; // Skip to the next group
+                }
+            }
+            None => {
+                // This board state has not been visited before.
+                visited_states.insert(board_after_move.clone(), current_score_at_board);
+                should_recurse = true;
+            }
+        }
+
+        if should_recurse {
             current_moves_path.push((r_click, c_click));
 
             // Make the recursive call
@@ -166,25 +188,19 @@ fn find_best_solution_recursive(
             // Backtrack: remove the last move from path for the next iteration
             current_moves_path.pop();
         }
-
-        // Crucially, always undo the move at the end of the loop iteration.
-        // This reverts current_game_state from S' back to S, so the next iteration
-        // of the loop correctly applies its move to S.
+        // Crucially, always undo the move at the end of the loop iteration
+        // if the path was not pruned by the `continue` statement.
         current_game_state.undo_last_move();
     }
     // Note on visited_states:
-        // The current implementation of `visited_states` is passed down and accumulates through the entire DFS call from `solve_dfs`.
-        // This means a state visited via one path will not be re-explored via another path, even if that other path
-        // might be shorter or lead to a different score context *before* reaching this common state.
-        // This is a common strategy for optimizing DFS by pruning redundant subtrees.
-        // For some search algorithms (like A* or if path cost matters beyond depth),
-        // one might remove the state from `visited_states` after the recursive call returns (backtracking)
-        // or store costs within the visited set. However, for this DFS aiming to maximize score within a depth,
-        // this global accumulation is typical.
-    }
+        // The current implementation of `visited_states` (now a HashMap) is passed down and accumulates.
+        // It stores the max score found so far to reach a given board state.
+        // Paths leading to a known board state are only explored if they do so with a higher score.
+    // REMOVED EXTRA BRACE HERE
 
-    // Fallback: If no moves were explored (e.g., all led to already visited states, or `available_groups` was initially empty
-    // and not caught by `is_game_over`), then the "solution" from this point is the current state evaluated as is.
+    // Fallback: If no moves were explored (e.g., all led to already visited states with lower/equal scores,
+    // or `available_groups` was initially empty and not caught by `is_game_over`),
+    // then the "solution" from this point is the current state evaluated as is.
     // This is crucial if `best_solution_found` remains `None` after the loop.
     if best_solution_found.is_none() {
         // This can happen if all moves lead to states already in `visited_states` or if `available_groups` was empty
