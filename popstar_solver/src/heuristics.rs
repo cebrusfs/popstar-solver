@@ -16,7 +16,7 @@ pub fn count_unique_colors(board: &Board) -> usize {
         for c in 0..BOARD_SIZE {
             let tile = board.get_tile(r, c);
             if tile != Tile::Empty {
-                unique_tiles.insert(tile); // HashSet ensures uniqueness
+                unique_tiles.insert(tile);
             }
         }
     }
@@ -39,20 +39,17 @@ pub fn count_unique_colors(board: &Board) -> usize {
 /// The total count of truly isolated tiles as `u32`.
 pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
     let mut isolated_count = 0;
-    let mut visited = [[false; BOARD_SIZE]; BOARD_SIZE]; // To avoid processing tiles multiple times
+    let mut visited = [[false; BOARD_SIZE]; BOARD_SIZE];
 
     for r_idx in 0..BOARD_SIZE {
         for c_idx in 0..BOARD_SIZE {
             if !visited[r_idx][c_idx] && board.get_tile(r_idx, c_idx) != Tile::Empty {
                 let group = board.find_group(r_idx, c_idx);
                 if group.len() >= 2 {
-                    // This tile is part of a group, mark all tiles in the group as visited.
                     for &(r, c) in &group {
                         visited[r][c] = true;
                     }
                 } else {
-                    // This tile is a singleton (group length is 1, or 0 if find_group had issues).
-                    // Mark as visited and count as isolated.
                     visited[r_idx][c_idx] = true;
                     isolated_count += 1;
                 }
@@ -74,23 +71,21 @@ pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
 ///
 /// # Returns
 /// An `Option` containing a tuple:
-///   - `usize`: The score that would be obtained by eliminating the chosen group.
+///   - `f64`: The score that would be obtained by eliminating the chosen group.
 ///   - `(usize, usize)`: The coordinate of a representative tile (e.g., the first tile) from the chosen group, used as the click point.
 /// Returns `None` if no groups are available on the board.
 // TODO: Consider aligning all choose_move_* functions to a common return signature like `(actual_score_of_move, Option<(usize,usize)>)` as per Issue Comment #2.
-pub fn choose_move_mis(current_board: &Board) -> Option<(usize, (usize, usize))> {
+pub fn choose_move_mis(current_board: &Board) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
         return None;
     }
 
-    // Initialize with the first group's data
     let first_group = &available_groups[0];
     let mut max_score = first_group.len() * first_group.len() * 5;
     let mut best_group = first_group.clone();
 
-    // Iterate starting from the second group
     for group in available_groups.iter().skip(1) {
         let score = group.len() * group.len() * 5;
         if score > max_score {
@@ -101,7 +96,7 @@ pub fn choose_move_mis(current_board: &Board) -> Option<(usize, (usize, usize))>
             best_group = group.clone();
         }
     }
-    Some((max_score, best_group[0]))
+    Some((max_score as f64, best_group[0]))
 }
 
 /// Chooses a move based on the Largest Group Priority (LGP) strategy.
@@ -116,20 +111,19 @@ pub fn choose_move_mis(current_board: &Board) -> Option<(usize, (usize, usize))>
 ///
 /// # Returns
 /// An `Option` containing a tuple:
-///   - `usize`: The number of tiles in the chosen group (its length).
+///   - `f64`: The number of tiles in the chosen group (its length).
 ///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
 /// Returns `None` if no groups are available on the board.
-pub fn choose_move_lgp(current_board: &Board) -> Option<(usize, (usize, usize))> {
+pub fn choose_move_lgp(current_board: &Board) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
         return None;
     }
 
-    // Find the group with the maximum length.
     // The call to unwrap() is safe because we've checked that available_groups is not empty.
-    let best_group = available_groups.iter().max_by_key(|g| g.len()).unwrap(); // .clone() is not needed if we only take one tile coord
-    Some((best_group.len(), best_group[0]))
+    let best_group = available_groups.iter().max_by_key(|g| g.len()).unwrap();
+    Some((best_group.len() as f64, best_group[0]))
 }
 
 /// Chooses a move based on the Color Reduction Priority (CRP) strategy.
@@ -144,19 +138,16 @@ pub fn choose_move_lgp(current_board: &Board) -> Option<(usize, (usize, usize))>
 ///
 /// # Returns
 /// An `Option` containing a tuple:
-///   - `(usize, usize)`: A pair representing `(resulting_colors, group_size)` for the chosen move.
-///     `resulting_colors` is the number of unique colors on the board *after* the chosen group is eliminated.
-///     `group_size` is the number of tiles in the chosen group.
+///   - `f64`: The number of unique colors on the board *after* the chosen group is eliminated.
 ///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
 /// Returns `None` if no groups are available on the board.
-pub fn choose_move_crp(current_board: &Board) -> Option<((usize, usize), (usize, usize))> {
+pub fn choose_move_crp(current_board: &Board) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
         return None;
     }
 
-    // Initialize with the first group's simulated result
     let first_group = &available_groups[0];
     // PERFORMANCE: Cloning the board here for initialization.
     let mut initial_temp_board = current_board.clone();
@@ -167,7 +158,6 @@ pub fn choose_move_crp(current_board: &Board) -> Option<((usize, usize), (usize,
     let mut max_size_at_min_colors = first_group.len();
     let mut best_group_choice = first_group.clone();
 
-    // Iterate starting from the second group
     for group_candidate in available_groups.iter().skip(1) {
         // PERFORMANCE: Cloning the board for each candidate group to simulate the move can be
         // computationally intensive, especially with a large number of available groups.
@@ -188,10 +178,7 @@ pub fn choose_move_crp(current_board: &Board) -> Option<((usize, usize), (usize,
             best_group_choice = group_candidate.clone();
         }
     }
-    Some((
-        (min_resulting_colors, max_size_at_min_colors),
-        best_group_choice[0],
-    ))
+    Some((min_resulting_colors as f64, best_group_choice[0]))
 }
 
 /// Chooses a move based on the Maximize Immediate Score & Penalize Singletons (MISPS) strategy.
@@ -210,10 +197,10 @@ pub fn choose_move_crp(current_board: &Board) -> Option<((usize, usize), (usize,
 ///
 /// # Returns
 /// An `Option` containing a tuple:
-///   - `i32`: The calculated heuristic value for the chosen move.
+///   - `f64`: The calculated heuristic value for the chosen move.
 ///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
 /// Returns `None` if no groups are available on the board.
-pub fn choose_move_misps(current_board: &Board) -> Option<(i32, (usize, usize))> {
+pub fn choose_move_misps(current_board: &Board) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
@@ -222,7 +209,6 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(i32, (usize, usize))>
 
     const SINGLETON_PENALTY_FACTOR: i32 = 50;
 
-    // Initialize with the first group's simulated result
     let first_group = &available_groups[0];
     let first_immediate_score = (first_group.len() * first_group.len() * 5) as i32;
     // PERFORMANCE: Cloning the board here for initialization.
@@ -236,7 +222,6 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(i32, (usize, usize))>
     let mut max_group_size_at_max_heuristic = first_group.len();
     let mut best_group_choice = first_group.clone();
 
-    // Iterate starting from the second group
     for group_candidate in available_groups.iter().skip(1) {
         let immediate_score = (group_candidate.len() * group_candidate.len() * 5) as i32;
 
@@ -260,8 +245,296 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(i32, (usize, usize))>
             best_group_choice = group_candidate.clone();
         }
     }
-    Some((max_heuristic_value, best_group_choice[0]))
+    Some((max_heuristic_value as f64, best_group_choice[0]))
 }
+
+/// Chooses a move based on the Smallest Group Priority (SGP) strategy.
+///
+/// This strategy selects the group containing the smallest number of tiles.
+/// If multiple groups have the same minimal size, the one encountered first (based on
+/// `find_all_groups` iteration order) is chosen.
+///
+/// # Arguments
+/// * `current_board`: A reference to the current `Board` state.
+///
+/// # Returns
+/// An `Option` containing a tuple:
+///   - `f64`: The number of tiles in the chosen group (its length).
+///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
+/// Returns `None` if no groups are available on the board.
+pub fn choose_move_sgp(current_board: &Board) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    // The call to unwrap() is safe because we've checked that available_groups is not empty.
+    let best_group = available_groups.iter().min_by_key(|g| g.len()).unwrap();
+    Some((best_group.len() as f64, best_group[0]))
+}
+
+/// Chooses a move based on the Clear Focus strategy.
+///
+/// This strategy simulates eliminating each available group and chooses the one that results
+/// in the minimum number of total tiles remaining on the board.
+/// If multiple moves result in the same minimum number of remaining tiles, the one
+/// that involves eliminating a larger original group is preferred. If still tied,
+/// the one encountered first is chosen.
+///
+/// # Arguments
+/// * `current_board`: A reference to the current `Board` state.
+///
+/// # Returns
+/// An `Option` containing a tuple:
+///   - `f64`: The minimum number of tiles remaining on the board after the chosen move.
+///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
+/// Returns `None` if no groups are available on the board.
+pub fn choose_move_clear_focus(current_board: &Board) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    let mut min_remaining_tiles = usize::MAX;
+    let mut max_original_group_size_at_min = 0;
+    let mut best_group_choice: Option<Vec<(usize, usize)>> = None;
+
+    for group_candidate in available_groups {
+        // PERFORMANCE: Cloning the board for each candidate group.
+        let mut temp_board_sim = current_board.clone();
+        temp_board_sim.eliminate_group(&group_candidate); // Pass as slice
+        temp_board_sim.apply_gravity();
+        temp_board_sim.shift_columns();
+
+        let mut remaining_tiles_count = 0;
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                if temp_board_sim.get_tile(r, c) != Tile::Empty {
+                    remaining_tiles_count += 1;
+                }
+            }
+        }
+
+        let current_candidate_original_size = group_candidate.len();
+
+        if best_group_choice.is_none() || remaining_tiles_count < min_remaining_tiles {
+            min_remaining_tiles = remaining_tiles_count;
+            max_original_group_size_at_min = current_candidate_original_size;
+            best_group_choice = Some(group_candidate);
+        } else if remaining_tiles_count == min_remaining_tiles {
+            if current_candidate_original_size > max_original_group_size_at_min {
+                max_original_group_size_at_min = current_candidate_original_size;
+                best_group_choice = Some(group_candidate);
+            }
+        }
+    }
+
+    best_group_choice.map(|group| (min_remaining_tiles as f64, group[0]))
+}
+
+/// Chooses a move based on the Avoid Orphans strategy.
+///
+/// This strategy primarily aims to maximize the immediate score (like MIS) but
+/// heavily penalizes moves that result in "orphan" tiles (a single tile of a
+/// specific color remaining after the move).
+/// The heuristic value for a move is `(immediate_score) - penalty`.
+/// `penalty` is a large value if orphans are created, `0.0` otherwise.
+///
+/// # Arguments
+/// * `current_board`: A reference to the current `Board` state.
+///
+/// # Returns
+/// An `Option` containing a tuple:
+///   - `f64`: The calculated (potentially penalized) heuristic value for the chosen move.
+///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
+/// Returns `None` if no groups are available on the board.
+pub fn choose_move_avoid_orphans(current_board: &Board) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    const ORPHAN_PENALTY: f64 = 10000.0;
+    let mut max_heuristic_value = -f64::INFINITY; // Initialize with a very small value
+    let mut max_group_size_at_max_heuristic = 0;
+    let mut best_group_choice: Option<Vec<(usize, usize)>> = None;
+
+    for group_candidate in available_groups {
+        let immediate_score = (group_candidate.len() * group_candidate.len() * 5) as f64;
+
+        // PERFORMANCE: Cloning the board for each candidate group.
+        let mut temp_board_sim = current_board.clone();
+        temp_board_sim.eliminate_group(&group_candidate); // Pass as slice
+        temp_board_sim.apply_gravity();
+        temp_board_sim.shift_columns();
+
+        let mut color_counts = std::collections::HashMap::new();
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                let tile = temp_board_sim.get_tile(r, c);
+                if tile != Tile::Empty {
+                    *color_counts.entry(tile).or_insert(0u32) += 1;
+                }
+            }
+        }
+
+        let mut creates_orphan = false;
+        for count in color_counts.values() {
+            if *count == 1 {
+                creates_orphan = true;
+                break;
+            }
+        }
+
+        let penalty = if creates_orphan { ORPHAN_PENALTY } else { 0.0 };
+        let heuristic_value = immediate_score - penalty;
+        let current_candidate_original_size = group_candidate.len();
+
+        if best_group_choice.is_none() || heuristic_value > max_heuristic_value {
+            max_heuristic_value = heuristic_value;
+            max_group_size_at_max_heuristic = current_candidate_original_size;
+            best_group_choice = Some(group_candidate);
+        } else if heuristic_value == max_heuristic_value {
+            if current_candidate_original_size > max_group_size_at_max_heuristic {
+                max_group_size_at_max_heuristic = current_candidate_original_size;
+                best_group_choice = Some(group_candidate);
+            }
+        }
+    }
+
+    best_group_choice.map(|group| (max_heuristic_value, group[0]))
+}
+
+/// Chooses a move based on preserving the largest color group ("Color Reservation").
+///
+/// This strategy identifies the color of the largest group currently on the board.
+/// It then scores moves that eliminate groups of other colors by their size,
+/// while moves that eliminate groups of the "preserved" color are scored as 0.
+/// The goal is to clear other colors, allowing the preserved color to consolidate.
+///
+/// # Arguments
+/// * `current_board`: A reference to the current `Board` state.
+///
+/// # Returns
+/// An `Option` containing a tuple:
+///   - `f64`: The calculated score for the chosen move (group size or 0).
+///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
+/// Returns `None` if no groups are available on the board.
+pub fn choose_move_preserve_largest_color_group(current_board: &Board) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    // Identify the color of the largest group (C_L)
+    let largest_group_on_board = available_groups.iter().max_by_key(|g| g.len());
+    let color_to_preserve: Option<Tile> = largest_group_on_board.map(|lg| {
+        // Get the color of the first tile in the largest group
+        // lg[0] is (row, col). We need to get the tile at this coordinate.
+        let (r, c) = lg[0];
+        current_board.get_tile(r,c)
+    });
+
+    if color_to_preserve.is_none() || color_to_preserve == Some(Tile::Empty) {
+        // Fallback if no largest group or it's somehow empty (should not happen with find_all_groups)
+        // Or if the largest group's color is Empty (shouldn't happen)
+        // In this case, behave like LGP to just pick the largest available group.
+        return choose_move_lgp(current_board);
+    }
+    let c_l = color_to_preserve.unwrap();
+
+    let mut max_score = -1.0f64; // Scores are non-negative (0.0 or group.len())
+    let mut best_group_choice: Option<Vec<(usize, usize)>> = None;
+    let mut tie_break_original_size = 0;
+
+    for group_candidate in available_groups {
+        let (r_cand, c_cand) = group_candidate[0];
+        let candidate_color = current_board.get_tile(r_cand, c_cand);
+        let current_candidate_original_size = group_candidate.len();
+
+        let score = if candidate_color == c_l {
+            0.0 // Discourage removing the preserved color
+        } else {
+            current_candidate_original_size as f64
+        };
+
+        if best_group_choice.is_none() || score > max_score {
+            max_score = score;
+            tie_break_original_size = current_candidate_original_size;
+            best_group_choice = Some(group_candidate);
+        } else if score == max_score {
+            if current_candidate_original_size > tie_break_original_size {
+                tie_break_original_size = current_candidate_original_size;
+                best_group_choice = Some(group_candidate);
+            }
+        }
+    }
+
+    best_group_choice.map(|group| (max_score, group[0]))
+}
+
+
+/// Chooses a move based on maximizing the size of the largest group on the *next* board state.
+///
+/// This "Connectivity/Consolidation Focus" strategy simulates eliminating each available group (`G1`).
+/// For each simulation, it finds all groups on the resulting board and identifies the
+/// size of the largest one (`max_next_group_size`). The strategy chooses to eliminate the
+/// initial group `G1` that leads to the board state with the largest `max_next_group_size`.
+///
+/// # Arguments
+/// * `current_board`: A reference to the current `Board` state.
+///
+/// # Returns
+/// An `Option` containing a tuple:
+///   - `f64`: The size of the largest group on the board *after* the chosen move.
+///   - `(usize, usize)`: The coordinate of a representative tile from the chosen initial group.
+/// Returns `None` if no groups are available on the initial board.
+pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    let mut max_future_group_size = 0.0f64;
+    let mut best_original_group_size = 0;
+    let mut best_group_choice: Option<Vec<(usize, usize)>> = None;
+
+    for group_g1_candidate in available_groups {
+        // PERFORMANCE: Cloning the board for each candidate group.
+        let mut temp_board_sim = current_board.clone();
+        temp_board_sim.eliminate_group(&group_g1_candidate); // Pass as slice
+        temp_board_sim.apply_gravity();
+        temp_board_sim.shift_columns();
+
+        let groups_on_sim_board = temp_board_sim.find_all_groups();
+        let current_max_next_group_size = if groups_on_sim_board.is_empty() {
+            0
+        } else {
+            groups_on_sim_board.iter().map(|g| g.len()).max().unwrap_or(0)
+        };
+
+        let current_g1_original_size = group_g1_candidate.len();
+
+        if best_group_choice.is_none() || (current_max_next_group_size as f64) > max_future_group_size {
+            max_future_group_size = current_max_next_group_size as f64;
+            best_original_group_size = current_g1_original_size;
+            best_group_choice = Some(group_g1_candidate);
+        } else if (current_max_next_group_size as f64) == max_future_group_size {
+            if current_g1_original_size > best_original_group_size {
+                best_original_group_size = current_g1_original_size;
+                best_group_choice = Some(group_g1_candidate);
+            }
+        }
+    }
+
+    best_group_choice.map(|group| (max_future_group_size, group[0]))
+}
+
 
 /// Evaluates a game state by playing it out until the end using a specified heuristic strategy.
 ///
@@ -287,31 +560,20 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(i32, (usize, usize))>
 /// chosen group (which also indicates an inconsistency).
 pub fn evaluate_with_heuristic(mut game_state: Game) -> u32 {
     while !game_state.is_game_over() {
-        // Use MISPS to choose the next move.
         if let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(game_state.board()) {
-            // Ensure the chosen group is not empty before trying to get click coordinates.
-            // This check is a safeguard; choose_move_misps should return None if no valid groups exist.
-            // Since choose_move_misps now returns a single coordinate, chosen_group_coord is (r_click, c_click)
-            // The chosen_group (full list of coords) is not returned by choose_move_misps anymore.
-            // The process_move function in Game engine uses a single (r,c) to identify a group.
             let (r_click, c_click) = chosen_group_coord;
 
-            // Process the chosen move.
             if !game_state.process_move(r_click, c_click) {
-                // This warning indicates a potential issue if a move chosen by the heuristic
-                // cannot be processed by the game engine.
                 eprintln!(
                     "Warning: evaluate_with_heuristic using MISPS chose click ({},{}) but process_move failed. Board:\n{}",
                     r_click, c_click, game_state.board()
                 );
-                break; // Stop evaluation if a move fails.
+                break;
             }
         } else {
-            // No more moves available according to the heuristic, so the game simulation part ends.
             break;
         }
     }
-    // Return the final score of the game state after all heuristic moves are made.
     game_state.final_score()
 }
 
@@ -356,7 +618,6 @@ pub fn calculate_admissible_heuristic(board: &Board) -> u32 {
         heuristic_score += count * count * 5;
     }
 
-    // Add the maximum possible end-game bonus
     heuristic_score += 2000;
 
     heuristic_score
@@ -371,8 +632,6 @@ mod tests {
 
     #[test]
     fn test_admissible_heuristic_calculation() {
-        // Test case 1: Empty board
-        // Expect: 0 (for tiles) + 2000 (bonus) = 2000
         let empty_board_arr: [&str; 0] = [];
         let board_empty = board_from_str_array(&empty_board_arr).unwrap();
         assert_eq!(
@@ -381,13 +640,9 @@ mod tests {
             "Empty board heuristic"
         );
 
-        // Test case 2: Board with a few tiles of mixed colors (no groups)
-        // R: 1, G: 1, B: 1, Y: 1
-        // Score: (1*1*5 for R) + (1*1*5 for G) + (1*1*5 for B) + (1*1*5 for Y) + 2000
-        // Score: 5 + 5 + 5 + 5 + 2000 = 2020
         let board_mixed_no_groups = board_from_str_array(&[
-            "R B", //
-            "Y G", //
+            "R B",
+            "Y G",
         ])
         .unwrap();
         assert_eq!(
@@ -396,14 +651,9 @@ mod tests {
             "Mixed colors, no groups"
         );
 
-        // Test case 3: Board with some potential groups
-        // R: 3, G: 1, B: 2
-        // Score: (3*3*5 for R) + (1*1*5 for G) + (2*2*5 for B) + 2000
-        // Score: (9*5) + (1*5) + (4*5) + 2000
-        // Score: 45 + 5 + 20 + 2000 = 2070
         let board_potential_groups = board_from_str_array(&[
-            "R R R G", // R=3, G=1
-            "B B . .", // B=2
+            "R R R G",
+            "B B . .",
         ])
         .unwrap();
         assert_eq!(
@@ -412,16 +662,9 @@ mod tests {
             "Potential groups"
         );
 
-        // Test case 4: Board full of one color (e.g., all Red on a 2x2 part of board for simplicity)
-        // Assuming a 2x2 board area for this test, filled with Red. R: 4
-        // Score: (4*4*5 for R) + 2000
-        // Score: (16*5) + 2000 = 80 + 2000 = 2080
-        // Note: board_from_str_array creates a board of BOARD_SIZE, filling unspecified with Empty.
-        // If BOARD_SIZE is 10, then a 2x2 "RR", "RR" input means 4 Red tiles, 96 Empty.
-        // Let's use a small example that board_from_str_array can handle well.
         let board_all_red_small = board_from_str_array(&[
-            "R R", // R=2
-            "R R", // R=2 -> total R=4
+            "R R",
+            "R R",
         ])
         .unwrap();
         assert_eq!(
@@ -430,14 +673,9 @@ mod tests {
             "All Red (4 tiles)"
         );
 
-        // Test with a larger number of one color, spanning more of a default 10x10 board
-        // Let's say 25 Red tiles.
-        // Score: (25*25*5 for R) + 2000
-        // Score: (625*5) + 2000 = 3125 + 2000 = 5125
-        let red_tiles_rows = vec!["R R R R R"; 5]; // 5 rows, each with 5 Red tiles
-        // This creates a 5x5 block of Red tiles. Total 25 Red tiles.
+        let red_tiles_rows = vec!["R R R R R"; 5];
         let board_many_red =
-            board_from_str_array(&red_tiles_rows) // Pass slice directly
+            board_from_str_array(&red_tiles_rows)
                 .unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_many_red),
@@ -445,15 +683,12 @@ mod tests {
             "Many Red tiles (25 tiles)"
         );
 
-        // Test with mixed colors, including some empty tiles from parsing
         let board_mixed_with_empty = board_from_str_array(&[
-            "R . B", // R=1, B=1
-            ". G .", // G=1
-            "Y . P", // Y=1, P=1
+            "R . B",
+            ". G .",
+            "Y . P",
         ])
         .unwrap();
-        // R=1, B=1, G=1, Y=1, P=1. Each 1*1*5 = 5. Total 5*5 = 25.
-        // Score = 25 + 2000 = 2025
         assert_eq!(
             calculate_admissible_heuristic(&board_mixed_with_empty),
             5 * 5 + 2000,

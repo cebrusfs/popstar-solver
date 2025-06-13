@@ -49,16 +49,17 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
     let mut visited_states = HashSet::new(); // Stores board states to avoid re-exploring identical configurations.
     visited_states.insert(initial_game.board().clone());
 
-    // Initial call to the recursive helper
-    let mut nodes_explored_dfs: u32 = 0; // Initialize counter for DFS
+    let mut nodes_explored_dfs: u32 = 0;
+    let mut game_instance = initial_game.clone();
+    let mut moves_path = Vec::new();
     let solution_opt = find_best_solution_recursive(
-        initial_game.clone(),
+        &mut game_instance,
         depth_limit,
         &mut visited_states,
-        Vec::new(),
-        &mut nodes_explored_dfs, // Pass counter to recursive function
+        &mut moves_path,
+        &mut nodes_explored_dfs,
     );
-    (solution_opt, nodes_explored_dfs) // Return the found solution and the count of explored nodes.
+    (solution_opt, nodes_explored_dfs)
 }
 
 /// Recursive helper function for the Depth-First Search (DFS) solver.
@@ -79,62 +80,19 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 /// allowed `depth_remaining`. Returns `None` if no valid solution path is found (though typically
 /// a solution representing the current state evaluated will be returned).
 ///
-/// # Potential Performance Optimization (Future Refactoring)
-///
-/// This function currently takes `current_game_state: Game` by value and
-/// `current_moves_path: Vec<(usize, usize)>` by value. This means that for each recursive
-/// call, the `Game` state is cloned, and the `current_moves_path` vector is cloned.
-/// For deep search paths, this repeated cloning can be a significant performance bottleneck.
-///
-/// A potential optimization is to modify the function signature and internal logic:
-///
-/// 1.  **Change `current_game_state: Game` to `current_game_state: &mut Game`**:
-///     Instead of cloning the game state for each simulated move, a mutable reference
-///     to a single game state would be passed down the recursive call stack.
-///
-/// 2.  **Change `current_moves_path: Vec<(usize, usize)>` to `current_moves_path: &mut Vec<(usize, usize)>`**:
-///     Similarly, the path of moves taken would be passed as a mutable reference,
-///     avoiding clones of the vector at each step.
-///
-/// 3.  **Applying and Undoing Moves**:
-///     *   Before making a recursive call for a chosen move, `current_game_state.process_move(r, c)`
-///         would be called directly on the mutable game state.
-///     *   The chosen move `(r, c)` would be `push`ed onto `current_moves_path`.
-///     *   After the recursive call returns (i.e., that path has been explored), the game state
-///         must be reverted to its state before the move was made. This is crucial for backtracking.
-///         This would be achieved by calling a corresponding `current_game_state.undo_last_move()`
-///         method, which would need to be implemented in the `Game` engine to revert the
-///         board, score, and steps to their previous values.
-///     *   The move `(r, c)` would then be `pop`ped from `current_moves_path`.
-///
-/// 4.  **Visited States (`HashSet<Board>`)**:
-///     The `visited_states` set would still store `Board` objects (cloned from `current_game_state.board()`
-///     after a move is processed). This is generally acceptable as `Board` cloning might be less
-///     expensive than full `Game` state cloning, and `HashSet` requires owned values.
-///
-/// **Expected Benefits**:
-/// *   **Reduced Memory Allocation and Copying**: Significantly less time spent on cloning `Game`
-///     objects and `Vec`s.
-/// *   **Improved Performance**: Especially noticeable in deeper searches or on boards with many
-///     possible moves at each step.
-///
-/// This refactoring would make the DFS explore states by mutating a single `Game` instance
-/// along a path and then reversing those mutations during backtracking, which is a common
-/// pattern for efficient DFS implementations.
-///
 fn find_best_solution_recursive(
-    current_game_state: Game,
+    current_game_state: &mut Game,
     depth_remaining: u32,
     visited_states: &mut HashSet<Board>,
-    current_moves_path: Vec<(usize, usize)>,
-    nodes_explored: &mut u32, // Counter for explored game states.
+    current_moves_path: &mut Vec<(usize, usize)>,
+    nodes_explored: &mut u32,
 ) -> Option<Solution> {
-    *nodes_explored += 1; // Increment for each state visited.
+    *nodes_explored += 1;
 
     // Base case: Game is over (no more moves possible).
     if current_game_state.is_game_over() {
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
@@ -146,11 +104,11 @@ fn find_best_solution_recursive(
         let steps = current_game_state.steps();
         // The evaluate_with_heuristic function plays out the game from current_game_state
         // using the MISPS heuristic and returns the final score achieved.
-        let heuristic_score = evaluate_with_heuristic(current_game_state);
+        let heuristic_score = evaluate_with_heuristic(current_game_state.clone()); // Clone for owned Game
         return Some(Solution {
-            moves: current_moves_path,
-            score: heuristic_score, // This is the score from the heuristic playout.
-            steps_taken: steps,     // Steps taken to reach this heuristic evaluation point.
+            moves: current_moves_path.clone(),
+            score: heuristic_score,
+            steps_taken: steps,
         });
     }
 
@@ -164,7 +122,7 @@ fn find_best_solution_recursive(
     // This check is similar to current_game_state.is_game_over() but done after the depth check.
     if available_groups.is_empty() {
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
@@ -172,50 +130,49 @@ fn find_best_solution_recursive(
 
     for group in available_groups {
         assert!(!group.is_empty());
-
-        // The first tile in a group can be used as the click coordinate for that group.
         let (r_click, c_click) = group[0];
 
-        // Clone the current game state to simulate the move.
-        let mut next_game_state = current_game_state.clone();
-        // Process the move (eliminate group, apply gravity, shift columns).
-        let move_was_valid = next_game_state.process_move(r_click, c_click);
+        // Apply the move to current_game_state (S -> S')
+        let move_was_valid = current_game_state.process_move(r_click, c_click);
 
-        // This assertion ensures that a group found by find_all_groups is always valid to process.
-        // If this fails, there's an inconsistency between find_all_groups and process_move.
         assert!(
             move_was_valid,
             "A group identified by find_all_groups should always be a valid move."
         );
 
-        // Pruning: if this board state has been visited before, skip it.
-        if visited_states.contains(next_game_state.board()) {
-            continue;
-        }
-        // Mark this new board state as visited for the current DFS path.
-        visited_states.insert(next_game_state.board().clone());
+        // Clone the board state *after* the move for checks and visited set.
+        let board_after_move = current_game_state.board().clone();
 
-        // Update the path of moves.
-        let mut new_moves_path = current_moves_path.clone();
-        new_moves_path.push((r_click, c_click));
+        if !visited_states.contains(&board_after_move) {
+            // If this new state S' has not been visited, mark it and recurse.
+            visited_states.insert(board_after_move); // Add S' to visited_states
+            current_moves_path.push((r_click, c_click));
 
-        // Recursively call for the next state.
-        if let Some(solution_from_this_path) = find_best_solution_recursive(
-            next_game_state,     // The state after the move.
-            depth_remaining - 1, // One step deeper in the search.
-            visited_states,      // Pass the set of visited states.
-            new_moves_path,      // Pass the updated list of moves.
-            nodes_explored,      // Pass the counter for explored nodes.
-        ) {
-            // If this path yields a better solution (higher score), update best_solution_found.
-            // Standard comparison: if no solution yet, or current is better.
-            if best_solution_found.is_none()
-                || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
-            {
-                best_solution_found = Some(solution_from_this_path);
+            // Make the recursive call
+            if let Some(solution_from_this_path) = find_best_solution_recursive(
+                current_game_state, // Pass mutable S'
+                depth_remaining - 1,
+                visited_states,
+                current_moves_path,
+                nodes_explored,
+            ) {
+                // Update best_solution_found if this path is better
+                if best_solution_found.is_none()
+                    || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
+                {
+                    best_solution_found = Some(solution_from_this_path);
+                }
             }
+            // Backtrack: remove the last move from path for the next iteration
+            current_moves_path.pop();
         }
-        // Note on visited_states:
+
+        // Crucially, always undo the move at the end of the loop iteration.
+        // This reverts current_game_state from S' back to S, so the next iteration
+        // of the loop correctly applies its move to S.
+        current_game_state.undo_last_move();
+    }
+    // Note on visited_states:
         // The current implementation of `visited_states` is passed down and accumulates through the entire DFS call from `solve_dfs`.
         // This means a state visited via one path will not be re-explored via another path, even if that other path
         // might be shorter or lead to a different score context *before* reaching this common state.
@@ -232,9 +189,8 @@ fn find_best_solution_recursive(
     if best_solution_found.is_none() {
         // This can happen if all moves lead to states already in `visited_states` or if `available_groups` was empty
         // (which should ideally be caught by `is_game_over` or `available_groups.is_empty()` checks earlier).
-        // The score here is the final score of the current board (including bonus if game over).
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
