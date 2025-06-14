@@ -1,5 +1,5 @@
 use crate::engine::{Board, Game};
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 // Re-export the heuristic functions for backward compatibility
 pub use crate::heuristics::evaluate_with_heuristic;
@@ -46,19 +46,22 @@ pub struct Solution {
 /// are cut off by the depth limit, allowing the DFS to still make decisions based on these
 /// potentially incomplete game plays.
 pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u32) {
-    let mut visited_states = HashSet::new(); // Stores board states to avoid re-exploring identical configurations.
-    visited_states.insert(initial_game.board().clone());
+    let mut visited_states = HashMap::new(); // Changed from HashSet to HashMap
+                                             // Insert the initial state with its current score.
+                                             // The score for the initial state is initial_game.score() (usually 0).
+    visited_states.insert(initial_game.board().clone(), initial_game.score());
 
-    // Initial call to the recursive helper
-    let mut nodes_explored_dfs: u32 = 0; // Initialize counter for DFS
+    let mut nodes_explored_dfs: u32 = 0;
+    let mut game_instance = initial_game.clone();
+    let mut moves_path = Vec::new();
     let solution_opt = find_best_solution_recursive(
-        initial_game.clone(),
+        &mut game_instance,
         depth_limit,
         &mut visited_states,
-        Vec::new(),
-        &mut nodes_explored_dfs, // Pass counter to recursive function
+        &mut moves_path,
+        &mut nodes_explored_dfs,
     );
-    (solution_opt, nodes_explored_dfs) // Return the found solution and the count of explored nodes.
+    (solution_opt, nodes_explored_dfs)
 }
 
 /// Recursive helper function for the Depth-First Search (DFS) solver.
@@ -68,8 +71,8 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 /// # Arguments
 /// * `current_game_state`: The current `Game` state being evaluated.
 /// * `depth_remaining`: How many more moves (depth) can be explored from this state.
-/// * `visited_states`: A mutable reference to a `HashSet` storing `Board` configurations that
-///   have already been visited in the current DFS path to prevent cycles and redundant work.
+/// * `visited_states`: A mutable reference to a `HashMap` storing `Board` configurations as keys
+///   and the maximum score achieved to reach that board state as values.
 /// * `current_moves_path`: A `Vec` accumulating the sequence of moves taken to reach the
 ///   `current_game_state`.
 /// * `nodes_explored`: A mutable reference to a counter for the total number of states explored.
@@ -78,19 +81,20 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 /// An `Option<Solution>` representing the best solution found from this state down to the
 /// allowed `depth_remaining`. Returns `None` if no valid solution path is found (though typically
 /// a solution representing the current state evaluated will be returned).
+///
 fn find_best_solution_recursive(
-    current_game_state: Game,
+    current_game_state: &mut Game,
     depth_remaining: u32,
-    visited_states: &mut HashSet<Board>,
-    current_moves_path: Vec<(usize, usize)>,
-    nodes_explored: &mut u32, // Counter for explored game states.
+    visited_states: &mut HashMap<Board, u32>, // Changed type from HashSet<Board>
+    current_moves_path: &mut Vec<(usize, usize)>,
+    nodes_explored: &mut u32,
 ) -> Option<Solution> {
-    *nodes_explored += 1; // Increment for each state visited.
+    *nodes_explored += 1;
 
     // Base case: Game is over (no more moves possible).
     if current_game_state.is_game_over() {
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
@@ -100,13 +104,11 @@ fn find_best_solution_recursive(
     // Evaluate the current board using a heuristic if the game is not over.
     if depth_remaining == 0 {
         let steps = current_game_state.steps();
-        // The evaluate_with_heuristic function plays out the game from current_game_state
-        // using the MISPS heuristic and returns the final score achieved.
-        let heuristic_score = evaluate_with_heuristic(current_game_state);
+        let heuristic_score = evaluate_with_heuristic(current_game_state.clone());
         return Some(Solution {
-            moves: current_moves_path,
-            score: heuristic_score, // This is the score from the heuristic playout.
-            steps_taken: steps,     // Steps taken to reach this heuristic evaluation point.
+            moves: current_moves_path.clone(),
+            score: heuristic_score,
+            steps_taken: steps,
         });
     }
 
@@ -114,13 +116,9 @@ fn find_best_solution_recursive(
 
     let available_groups = current_game_state.board().find_all_groups();
 
-    // This handles the case where find_all_groups is empty.
-    // This is effectively another game-over condition: if no groups can be formed,
-    // the game cannot proceed from this state via elimination.
-    // This check is similar to current_game_state.is_game_over() but done after the depth check.
     if available_groups.is_empty() {
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
@@ -128,69 +126,60 @@ fn find_best_solution_recursive(
 
     for group in available_groups {
         assert!(!group.is_empty());
-
-        // The first tile in a group can be used as the click coordinate for that group.
         let (r_click, c_click) = group[0];
 
-        // Clone the current game state to simulate the move.
-        let mut next_game_state = current_game_state.clone();
-        // Process the move (eliminate group, apply gravity, shift columns).
-        let move_was_valid = next_game_state.process_move(r_click, c_click);
+        let move_was_valid = current_game_state.process_move(r_click, c_click);
 
-        // This assertion ensures that a group found by find_all_groups is always valid to process.
-        // If this fails, there's an inconsistency between find_all_groups and process_move.
         assert!(
             move_was_valid,
             "A group identified by find_all_groups should always be a valid move."
         );
 
-        // Pruning: if this board state has been visited before, skip it.
-        if visited_states.contains(next_game_state.board()) {
-            continue;
+        let board_after_move = current_game_state.board().clone();
+        let current_score_at_board = current_game_state.score();
+
+        match visited_states.get(&board_after_move) {
+            Some(&previous_max_score) => {
+                if current_score_at_board <= previous_max_score {
+                    current_game_state.undo_last_move();
+                    continue;
+                }
+                visited_states.insert(board_after_move.clone(), current_score_at_board);
+            }
+            None => {
+                visited_states.insert(board_after_move.clone(), current_score_at_board);
+            }
         }
-        // Mark this new board state as visited for the current DFS path.
-        visited_states.insert(next_game_state.board().clone());
 
-        // Update the path of moves.
-        let mut new_moves_path = current_moves_path.clone();
-        new_moves_path.push((r_click, c_click));
+        current_moves_path.push((r_click, c_click));
 
-        // Recursively call for the next state.
         if let Some(solution_from_this_path) = find_best_solution_recursive(
-            next_game_state,     // The state after the move.
-            depth_remaining - 1, // One step deeper in the search.
-            visited_states,      // Pass the set of visited states.
-            new_moves_path,      // Pass the updated list of moves.
-            nodes_explored,      // Pass the counter for explored nodes.
+            current_game_state,
+            depth_remaining - 1,
+            visited_states,
+            current_moves_path,
+            nodes_explored,
         ) {
-            // If this path yields a better solution (higher score), update best_solution_found.
-            // Standard comparison: if no solution yet, or current is better.
             if best_solution_found.is_none()
                 || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
             {
                 best_solution_found = Some(solution_from_this_path);
             }
         }
-        // Note on visited_states:
-        // The current implementation of `visited_states` is passed down and accumulates through the entire DFS call from `solve_dfs`.
-        // This means a state visited via one path will not be re-explored via another path, even if that other path
-        // might be shorter or lead to a different score context *before* reaching this common state.
-        // This is a common strategy for optimizing DFS by pruning redundant subtrees.
-        // For some search algorithms (like A* or if path cost matters beyond depth),
-        // one might remove the state from `visited_states` after the recursive call returns (backtracking)
-        // or store costs within the visited set. However, for this DFS aiming to maximize score within a depth,
-        // this global accumulation is typical.
+        current_moves_path.pop();
+
+        current_game_state.undo_last_move();
     }
 
-    // Fallback: If no moves were explored (e.g., all led to already visited states, or `available_groups` was initially empty
-    // and not caught by `is_game_over`), then the "solution" from this point is the current state evaluated as is.
+    // Fallback: If no moves were explored (e.g., all led to already visited states with lower/equal scores,
+    // or `available_groups` was initially empty and not caught by `is_game_over`),
+    // then the "solution" from this point is the current state evaluated as is.
     // This is crucial if `best_solution_found` remains `None` after the loop.
     if best_solution_found.is_none() {
         // This can happen if all moves lead to states already in `visited_states` or if `available_groups` was empty
         // (which should ideally be caught by `is_game_over` or `available_groups.is_empty()` checks earlier).
-        // The score here is the final score of the current board (including bonus if game over).
         return Some(Solution {
-            moves: current_moves_path,
+            moves: current_moves_path.clone(),
             score: current_game_state.final_score(),
             steps_taken: current_game_state.steps(),
         });
@@ -202,15 +191,14 @@ fn find_best_solution_recursive(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::count_truly_isolated_tiles;
-    use crate::engine::{Game, Tile}; // BOARD_SIZE removed
-    // Removed local board_from_str_array and board_from_minimal_str_array
+    use crate::engine::{Game, Tile};
+    use crate::heuristics::count_truly_isolated_tiles;
 
     #[test]
     fn test_count_truly_isolated_tiles_none_isolated() {
         let board = crate::utils::board_from_str_array(&[
-            "RR", // Group
-            "GG", // Group
+            "RR",
+            "GG",
         ])
         .unwrap();
         assert_eq!(count_truly_isolated_tiles(&board), 0);
@@ -219,9 +207,9 @@ mod tests {
     #[test]
     fn test_count_truly_isolated_tiles_some_isolated() {
         let board = crate::utils::board_from_str_array(&[
-            "R.B", // R, B are isolated
-            "G.Y", // G, Y are isolated
-            "PP",  // PP is a group
+            "R.B",
+            "G.Y",
+            "PP",
         ])
         .unwrap();
         assert_eq!(count_truly_isolated_tiles(&board), 4);
@@ -230,10 +218,11 @@ mod tests {
     #[test]
     fn test_count_truly_isolated_tiles_all_isolated() {
         let board = crate::utils::board_from_str_array(&[
-            "RGYB", "PYG.", // Changed 'M' to '.'
+            "RGYB",
+            "PYG.",
             "RBPY",
         ])
-        .unwrap(); // Assuming no two adjacent are same color
+        .unwrap();
         let expected_isolated = board
             .get_grid()
             .iter()
@@ -245,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_count_truly_isolated_tiles_empty_board() {
-        let board = crate::utils::board_from_str_array(&[]).unwrap(); // All empty
+        let board = crate::utils::board_from_str_array(&[]).unwrap();
         assert_eq!(count_truly_isolated_tiles(&board), 0);
     }
 
@@ -253,53 +242,83 @@ mod tests {
     fn test_solve_dfs_nodes_explored() {
         let board = crate::utils::board_from_str_array(&["RR"]).unwrap();
         let game = Game::new_with_board(board);
-        let depth_limit = 3; // Small depth limit
+        let depth_limit = 3;
 
         let (_solution_opt, nodes_explored) = solve_dfs(&game, depth_limit);
 
-        // Basic check: Ensure some nodes were explored.
-        // The exact number can be tricky to assert if logic changes,
-        // but it should be greater than 0 if the function is working.
         assert!(
             nodes_explored > 0,
             "Nodes explored should be greater than 0. Got {}",
             nodes_explored
         );
 
-        // Deeper assertion:
-        // For "RR" and depth 3:
-        // 1. Initial call to find_best_solution_recursive (nodes_explored = 1)
-        // 2. It finds one group "RR". Clicks it.
-        // 3. Recursive call for the empty board (nodes_explored = 2)
-        //    - This state is game over, returns.
-        // So, expected nodes_explored is 2.
         assert_eq!(
             nodes_explored, 2,
             "For 'RR' and depth 3, expected 2 nodes explored. Got {}",
             nodes_explored
         );
 
-        // Test with a board that has no moves
         let board_no_moves = crate::utils::board_from_str_array(&["R"]).unwrap();
         let game_no_moves = Game::new_with_board(board_no_moves);
         let (_solution_opt_no_moves, nodes_explored_no_moves) =
             solve_dfs(&game_no_moves, depth_limit);
-        // 1. Initial call. Game is over (no groups). Returns.
         assert_eq!(
             nodes_explored_no_moves, 1,
             "For 'R' (no moves) and depth 3, expected 1 node explored. Got {}",
             nodes_explored_no_moves
         );
 
-        // Test with a board and depth limit 0
         let board_depth_zero = crate::utils::board_from_str_array(&["RR"]).unwrap();
         let game_depth_zero = Game::new_with_board(board_depth_zero);
         let (_solution_opt_depth_zero, nodes_explored_depth_zero) = solve_dfs(&game_depth_zero, 0);
-        // 1. Initial call. Depth is 0. Returns.
         assert_eq!(
             nodes_explored_depth_zero, 1,
             "For 'RR' and depth 0, expected 1 node explored. Got {}",
             nodes_explored_depth_zero
+        );
+    }
+
+    #[test]
+    fn test_solve_dfs_simple_one_move_max() {
+        let board_str = [
+            "RRR......",
+            "G.G......",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+        ];
+        let board = crate::utils::board_from_str_array(&board_str).unwrap();
+        let initial_game = Game::new_with_board(board);
+        let depth_limit = 0;
+
+        let expected_score = evaluate_with_heuristic(initial_game.clone()) as u32;
+
+        let (solution_opt, nodes_explored) = solve_dfs(&initial_game, depth_limit);
+
+        assert!(solution_opt.is_some(), "Solution should be Some");
+        let solution = solution_opt.unwrap();
+
+        assert_eq!(
+            solution.score, expected_score,
+            "Score at depth 0 should be the heuristic evaluation of the initial state"
+        );
+        assert!(
+            solution.moves.is_empty(),
+            "Moves should be empty for depth 0 search from initial state"
+        );
+        assert_eq!(
+            solution.steps_taken,
+            initial_game.steps(), // Should be 0 for a fresh game
+            "Steps taken should be initial game steps (0) for depth 0 search"
+        );
+        assert_eq!(
+            nodes_explored, 1,
+            "Nodes explored should be 1 for depth 0 search"
         );
     }
 }

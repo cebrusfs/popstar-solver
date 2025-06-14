@@ -167,10 +167,7 @@ mod tests {
 
     #[test]
     fn test_board_from_str_array_too_many_rows() {
-        let mut rows = Vec::new();
-        for _ in 0..=BOARD_SIZE {
-            rows.push("R.........");
-        }
+        let rows = vec!["R........."; BOARD_SIZE + 1]; // Use vec! macro
         let result = board_from_str_array(&rows);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid number of rows"));
