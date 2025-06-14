@@ -1,0 +1,269 @@
+Starting heuristic evaluation for 20 boards...
+
+Evaluating Board 0 (Seed: 0)
+  Strategy: MIS         , Score: 1495  , Steps: 23
+  Strategy: LGP         , Score: 1310  , Steps: 25
+  Strategy: CRP         , Score: 1495  , Steps: 23
+  Strategy: MISPS       , Score: 3370  , Steps: 31
+  Strategy: SGP         , Score: 1295  , Steps: 35
+  Strategy: ClrFocus    , Score: 1495  , Steps: 23
+  Strategy: AvdOrphn    , Score: 1495  , Steps: 23
+  Strategy: PrsrvLrgC   , Score: 2085  , Steps: 28
+  Strategy: CnctFcs     , Score: 1335  , Steps: 28
+  Strategy: MISPS_CTB   , Score: 3370  , Steps: 31
+
+Evaluating Board 1 (Seed: 1)
+  Strategy: MIS         , Score: 1395  , Steps: 25
+  Strategy: LGP         , Score: 1205  , Steps: 27
+  Strategy: CRP         , Score: 1395  , Steps: 25
+  Strategy: MISPS       , Score: 1575  , Steps: 28
+  Strategy: SGP         , Score: 1140  , Steps: 31
+  Strategy: ClrFocus    , Score: 1395  , Steps: 25
+  Strategy: AvdOrphn    , Score: 1395  , Steps: 25
+  Strategy: PrsrvLrgC   , Score: 1260  , Steps: 30
+  Strategy: CnctFcs     , Score: 1090  , Steps: 26
+  Strategy: MISPS_CTB   , Score: 1575  , Steps: 28
+
+Evaluating Board 2 (Seed: 2)
+  Strategy: MIS         , Score: 1580  , Steps: 28
+  Strategy: LGP         , Score: 1675  , Steps: 26
+  Strategy: CRP         , Score: 1580  , Steps: 28
+  Strategy: MISPS       , Score: 3820  , Steps: 31
+  Strategy: SGP         , Score: 1920  , Steps: 31
+  Strategy: ClrFocus    , Score: 1580  , Steps: 28
+  Strategy: AvdOrphn    , Score: 1580  , Steps: 28
+  Strategy: PrsrvLrgC   , Score: 1895  , Steps: 26
+  Strategy: CnctFcs     , Score: 2085  , Steps: 28
+  Strategy: MISPS_CTB   , Score: 3820  , Steps: 31
+
+Evaluating Board 3 (Seed: 3)
+  Strategy: MIS         , Score: 1465  , Steps: 29
+  Strategy: LGP         , Score: 1500  , Steps: 23
+  Strategy: CRP         , Score: 1465  , Steps: 29
+  Strategy: MISPS       , Score: 2765  , Steps: 30
+  Strategy: SGP         , Score: 2030  , Steps: 39
+  Strategy: ClrFocus    , Score: 1465  , Steps: 29
+  Strategy: AvdOrphn    , Score: 1465  , Steps: 29
+  Strategy: PrsrvLrgC   , Score: 1210  , Steps: 27
+  Strategy: CnctFcs     , Score: 1390  , Steps: 29
+  Strategy: MISPS_CTB   , Score: 2765  , Steps: 30
+
+Evaluating Board 4 (Seed: 4)
+  Strategy: MIS         , Score: 1505  , Steps: 24
+  Strategy: LGP         , Score: 1555  , Steps: 26
+  Strategy: CRP         , Score: 1505  , Steps: 24
+  Strategy: MISPS       , Score: 2725  , Steps: 29
+  Strategy: SGP         , Score: 985   , Steps: 30
+  Strategy: ClrFocus    , Score: 1505  , Steps: 24
+  Strategy: AvdOrphn    , Score: 1505  , Steps: 24
+  Strategy: PrsrvLrgC   , Score: 1660  , Steps: 27
+  Strategy: CnctFcs     , Score: 1660  , Steps: 26
+  Strategy: MISPS_CTB   , Score: 2725  , Steps: 29
+
+Evaluating Board 5 (Seed: 5)
+  Strategy: MIS         , Score: 1515  , Steps: 26
+  Strategy: LGP         , Score: 1355  , Steps: 25
+  Strategy: CRP         , Score: 1515  , Steps: 26
+  Strategy: MISPS       , Score: 2060  , Steps: 25
+  Strategy: SGP         , Score: 1375  , Steps: 29
+  Strategy: ClrFocus    , Score: 1515  , Steps: 26
+  Strategy: AvdOrphn    , Score: 1515  , Steps: 26
+  Strategy: PrsrvLrgC   , Score: 1800  , Steps: 24
+  Strategy: CnctFcs     , Score: 1870  , Steps: 28
+  Strategy: MISPS_CTB   , Score: 2060  , Steps: 25
+
+Evaluating Board 6 (Seed: 6)
+  Strategy: MIS         , Score: 1285  , Steps: 28
+  Strategy: LGP         , Score: 1165  , Steps: 27
+  Strategy: CRP         , Score: 1285  , Steps: 28
+  Strategy: MISPS       , Score: 1440  , Steps: 24
+  Strategy: SGP         , Score: 1335  , Steps: 27
+  Strategy: ClrFocus    , Score: 1285  , Steps: 28
+  Strategy: AvdOrphn    , Score: 1285  , Steps: 28
+  Strategy: PrsrvLrgC   , Score: 2070  , Steps: 27
+  Strategy: CnctFcs     , Score: 1530  , Steps: 28
+  Strategy: MISPS_CTB   , Score: 1440  , Steps: 24
+
+Evaluating Board 7 (Seed: 7)
+  Strategy: MIS         , Score: 1605  , Steps: 26
+  Strategy: LGP         , Score: 1585  , Steps: 21
+  Strategy: CRP         , Score: 1605  , Steps: 26
+  Strategy: MISPS       , Score: 1710  , Steps: 27
+  Strategy: SGP         , Score: 1295  , Steps: 33
+  Strategy: ClrFocus    , Score: 1605  , Steps: 26
+  Strategy: AvdOrphn    , Score: 1605  , Steps: 26
+  Strategy: PrsrvLrgC   , Score: 3135  , Steps: 31
+  Strategy: CnctFcs     , Score: 3820  , Steps: 32
+  Strategy: MISPS_CTB   , Score: 1710  , Steps: 27
+
+Evaluating Board 8 (Seed: 8)
+  Strategy: MIS         , Score: 1305  , Steps: 28
+  Strategy: LGP         , Score: 1085  , Steps: 20
+  Strategy: CRP         , Score: 1305  , Steps: 28
+  Strategy: MISPS       , Score: 1365  , Steps: 28
+  Strategy: SGP         , Score: 995   , Steps: 32
+  Strategy: ClrFocus    , Score: 1305  , Steps: 28
+  Strategy: AvdOrphn    , Score: 1305  , Steps: 28
+  Strategy: PrsrvLrgC   , Score: 1355  , Steps: 31
+  Strategy: CnctFcs     , Score: 1500  , Steps: 25
+  Strategy: MISPS_CTB   , Score: 1365  , Steps: 28
+
+Evaluating Board 9 (Seed: 9)
+  Strategy: MIS         , Score: 1215  , Steps: 24
+  Strategy: LGP         , Score: 1275  , Steps: 24
+  Strategy: CRP         , Score: 1215  , Steps: 24
+  Strategy: MISPS       , Score: 1685  , Steps: 28
+  Strategy: SGP         , Score: 1130  , Steps: 28
+  Strategy: ClrFocus    , Score: 1215  , Steps: 24
+  Strategy: AvdOrphn    , Score: 1215  , Steps: 24
+  Strategy: PrsrvLrgC   , Score: 1790  , Steps: 28
+  Strategy: CnctFcs     , Score: 1245  , Steps: 25
+  Strategy: MISPS_CTB   , Score: 1685  , Steps: 28
+
+Evaluating Board 10 (Seed: 10)
+  Strategy: MIS         , Score: 1545  , Steps: 21
+  Strategy: LGP         , Score: 1585  , Steps: 22
+  Strategy: CRP         , Score: 1545  , Steps: 21
+  Strategy: MISPS       , Score: 1575  , Steps: 23
+  Strategy: SGP         , Score: 1580  , Steps: 27
+  Strategy: ClrFocus    , Score: 1545  , Steps: 21
+  Strategy: AvdOrphn    , Score: 1545  , Steps: 21
+  Strategy: PrsrvLrgC   , Score: 1605  , Steps: 27
+  Strategy: CnctFcs     , Score: 1890  , Steps: 23
+  Strategy: MISPS_CTB   , Score: 1575  , Steps: 23
+
+Evaluating Board 11 (Seed: 11)
+  Strategy: MIS         , Score: 2420  , Steps: 28
+  Strategy: LGP         , Score: 1565  , Steps: 28
+  Strategy: CRP         , Score: 2420  , Steps: 28
+  Strategy: MISPS       , Score: 1630  , Steps: 28
+  Strategy: SGP         , Score: 1390  , Steps: 33
+  Strategy: ClrFocus    , Score: 2420  , Steps: 28
+  Strategy: AvdOrphn    , Score: 2420  , Steps: 28
+  Strategy: PrsrvLrgC   , Score: 1585  , Steps: 27
+  Strategy: CnctFcs     , Score: 1985  , Steps: 29
+  Strategy: MISPS_CTB   , Score: 1630  , Steps: 28
+
+Evaluating Board 12 (Seed: 12)
+  Strategy: MIS         , Score: 1590  , Steps: 30
+  Strategy: LGP         , Score: 1505  , Steps: 28
+  Strategy: CRP         , Score: 1590  , Steps: 30
+  Strategy: MISPS       , Score: 3770  , Steps: 27
+  Strategy: SGP         , Score: 1565  , Steps: 30
+  Strategy: ClrFocus    , Score: 1590  , Steps: 30
+  Strategy: AvdOrphn    , Score: 1590  , Steps: 30
+  Strategy: PrsrvLrgC   , Score: 1610  , Steps: 31
+  Strategy: CnctFcs     , Score: 2150  , Steps: 28
+  Strategy: MISPS_CTB   , Score: 3770  , Steps: 27
+
+Evaluating Board 13 (Seed: 13)
+  Strategy: MIS         , Score: 1340  , Steps: 29
+  Strategy: LGP         , Score: 1335  , Steps: 32
+  Strategy: CRP         , Score: 1340  , Steps: 29
+  Strategy: MISPS       , Score: 1945  , Steps: 30
+  Strategy: SGP         , Score: 1220  , Steps: 35
+  Strategy: ClrFocus    , Score: 1340  , Steps: 29
+  Strategy: AvdOrphn    , Score: 1340  , Steps: 29
+  Strategy: PrsrvLrgC   , Score: 1265  , Steps: 32
+  Strategy: CnctFcs     , Score: 1530  , Steps: 30
+  Strategy: MISPS_CTB   , Score: 1945  , Steps: 30
+
+Evaluating Board 14 (Seed: 14)
+  Strategy: MIS         , Score: 1430  , Steps: 27
+  Strategy: LGP         , Score: 1475  , Steps: 25
+  Strategy: CRP         , Score: 1430  , Steps: 27
+  Strategy: MISPS       , Score: 3020  , Steps: 29
+  Strategy: SGP         , Score: 1315  , Steps: 35
+  Strategy: ClrFocus    , Score: 1430  , Steps: 27
+  Strategy: AvdOrphn    , Score: 1430  , Steps: 27
+  Strategy: PrsrvLrgC   , Score: 1865  , Steps: 31
+  Strategy: CnctFcs     , Score: 1390  , Steps: 32
+  Strategy: MISPS_CTB   , Score: 3020  , Steps: 29
+
+Evaluating Board 15 (Seed: 15)
+  Strategy: MIS         , Score: 1135  , Steps: 28
+  Strategy: LGP         , Score: 830   , Steps: 16
+  Strategy: CRP         , Score: 1135  , Steps: 28
+  Strategy: MISPS       , Score: 1320  , Steps: 30
+  Strategy: SGP         , Score: 2270  , Steps: 33
+  Strategy: ClrFocus    , Score: 1135  , Steps: 28
+  Strategy: AvdOrphn    , Score: 1135  , Steps: 28
+  Strategy: PrsrvLrgC   , Score: 2590  , Steps: 28
+  Strategy: CnctFcs     , Score: 1490  , Steps: 23
+  Strategy: MISPS_CTB   , Score: 1320  , Steps: 30
+
+Evaluating Board 16 (Seed: 16)
+  Strategy: MIS         , Score: 1465  , Steps: 26
+  Strategy: LGP         , Score: 1370  , Steps: 22
+  Strategy: CRP         , Score: 1465  , Steps: 26
+  Strategy: MISPS       , Score: 1645  , Steps: 26
+  Strategy: SGP         , Score: 1360  , Steps: 29
+  Strategy: ClrFocus    , Score: 1465  , Steps: 26
+  Strategy: AvdOrphn    , Score: 1465  , Steps: 26
+  Strategy: PrsrvLrgC   , Score: 3030  , Steps: 27
+  Strategy: CnctFcs     , Score: 2190  , Steps: 24
+  Strategy: MISPS_CTB   , Score: 1645  , Steps: 26
+
+Evaluating Board 17 (Seed: 17)
+  Strategy: MIS         , Score: 2220  , Steps: 20
+  Strategy: LGP         , Score: 2080  , Steps: 21
+  Strategy: CRP         , Score: 2220  , Steps: 20
+  Strategy: MISPS       , Score: 2475  , Steps: 21
+  Strategy: SGP         , Score: 4435  , Steps: 31
+  Strategy: ClrFocus    , Score: 2220  , Steps: 20
+  Strategy: AvdOrphn    , Score: 2220  , Steps: 20
+  Strategy: PrsrvLrgC   , Score: 1995  , Steps: 21
+  Strategy: CnctFcs     , Score: 4115  , Steps: 21
+  Strategy: MISPS_CTB   , Score: 2475  , Steps: 21
+
+Evaluating Board 18 (Seed: 18)
+  Strategy: MIS         , Score: 1400  , Steps: 25
+  Strategy: LGP         , Score: 1245  , Steps: 18
+  Strategy: CRP         , Score: 1400  , Steps: 25
+  Strategy: MISPS       , Score: 1490  , Steps: 27
+  Strategy: SGP         , Score: 2590  , Steps: 26
+  Strategy: ClrFocus    , Score: 1400  , Steps: 25
+  Strategy: AvdOrphn    , Score: 1400  , Steps: 25
+  Strategy: PrsrvLrgC   , Score: 2565  , Steps: 24
+  Strategy: CnctFcs     , Score: 2435  , Steps: 24
+  Strategy: MISPS_CTB   , Score: 1490  , Steps: 27
+
+Evaluating Board 19 (Seed: 19)
+  Strategy: MIS         , Score: 1255  , Steps: 24
+  Strategy: LGP         , Score: 1020  , Steps: 15
+  Strategy: CRP         , Score: 1255  , Steps: 24
+  Strategy: MISPS       , Score: 2540  , Steps: 28
+  Strategy: SGP         , Score: 1260  , Steps: 30
+  Strategy: ClrFocus    , Score: 1255  , Steps: 24
+  Strategy: AvdOrphn    , Score: 1255  , Steps: 24
+  Strategy: PrsrvLrgC   , Score: 1455  , Steps: 26
+  Strategy: CnctFcs     , Score: 1225  , Steps: 26
+  Strategy: MISPS_CTB   , Score: 2540  , Steps: 28
+
+--- Evaluation Complete ---
+Number of boards evaluated: 20
+Strategies evaluated: MIS, LGP, CRP, MISPS, SGP, ClrFocus, AvdOrphn, PrsrvLrgC, CnctFcs, MISPS_CTB
+
+--- Average Scores ---
+Strategy MISPS       : Average Score = 2196.25
+Strategy MISPS_CTB   : Average Score = 2196.25
+Strategy CnctFcs     : Average Score = 1896.25
+Strategy PrsrvLrgC   : Average Score = 1891.25
+Strategy SGP         : Average Score = 1624.25
+Strategy AvdOrphn    : Average Score = 1508.25
+Strategy MIS         : Average Score = 1508.25
+Strategy CRP         : Average Score = 1508.25
+Strategy ClrFocus    : Average Score = 1508.25
+Strategy LGP         : Average Score = 1386.00
+
+--- Win Counts (Highest Score on a Board) ---
+Strategy MISPS       : Wins = 10
+Strategy MISPS_CTB   : Wins = 10
+Strategy PrsrvLrgC   : Wins = 4
+Strategy CnctFcs     : Wins = 3
+Strategy SGP         : Wins = 2
+Strategy AvdOrphn    : Wins = 1
+Strategy CRP         : Wins = 1
+Strategy ClrFocus    : Wins = 1
+Strategy MIS         : Wins = 1
+Strategy LGP         : Wins = 0

@@ -51,8 +51,12 @@ fn main() {
     let args = Args::parse();
     println!("Searching for solution with depth limit {}...", args.depth);
 
-    let mut game = read_board_file(&args.board_file).unwrap_or_else(|_| panic!("Failed to read board from file: {}",
-        args.board_file.display()));
+    let mut game = read_board_file(&args.board_file).unwrap_or_else(|_| {
+        panic!(
+            "Failed to read board from file: {}",
+            args.board_file.display()
+        )
+    });
     println!("Loaded board from {}", args.board_file.display());
     println!("{}", game.board());
 

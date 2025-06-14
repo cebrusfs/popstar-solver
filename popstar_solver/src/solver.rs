@@ -15,7 +15,7 @@ pub struct Solution {
     pub moves: Vec<(usize, usize)>,
     /// The final score achieved after these moves. This score includes any end-game bonus
     /// if the game is over, or a heuristic evaluation if the search was cut off by depth limit.
-    pub score: u32,
+    pub score: i32, // Changed to i32
     /// The number of moves (eliminations) performed by the solver to reach this solution.
     /// This corresponds to the `steps` count in the `Game` struct.
     pub steps_taken: u32,
@@ -47,8 +47,8 @@ pub struct Solution {
 /// potentially incomplete game plays.
 pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u32) {
     let mut visited_states = HashMap::new(); // Changed from HashSet to HashMap
-    // Insert the initial state with its current score.
-    // The score for the initial state is initial_game.score() (usually 0).
+                                             // Insert the initial state with its current score.
+                                             // The score for the initial state is initial_game.score() (usually 0).
     visited_states.insert(initial_game.board().clone(), initial_game.score());
 
     let mut nodes_explored_dfs: u32 = 0;
@@ -146,56 +146,52 @@ fn find_best_solution_recursive(
         let board_after_move = current_game_state.board().clone();
         let current_score_at_board = current_game_state.score();
 
-        let mut should_recurse = false;
+        // Determine if we should recurse or prune this path.
         match visited_states.get(&board_after_move) {
             Some(&previous_max_score) => {
-                if current_score_at_board > previous_max_score {
-                    // This path reached the same board state with a better score
-                    visited_states.insert(board_after_move.clone(), current_score_at_board);
-                    should_recurse = true;
-                } else {
-                    // This path is worse or equal, prune it.
-                    // Undo the move before skipping to the next group.
+                if current_score_at_board <= previous_max_score {
+                    // This path is worse or equal to a previously found path to the same state, prune it.
                     current_game_state.undo_last_move();
-                    continue; // Skip to the next group
+                    continue; // Skip to the next group for this iteration
                 }
+                // If score is better, update visited_states and proceed to recursion.
+                visited_states.insert(board_after_move.clone(), current_score_at_board);
             }
             None => {
-                // This board state has not been visited before.
+                // This board state has not been visited before. Insert and proceed to recursion.
                 visited_states.insert(board_after_move.clone(), current_score_at_board);
-                should_recurse = true;
             }
         }
 
-        if should_recurse {
-            current_moves_path.push((r_click, c_click));
+        // If we haven't 'continued', then this path is worth exploring.
+        current_moves_path.push((r_click, c_click));
 
-            // Make the recursive call
-            if let Some(solution_from_this_path) = find_best_solution_recursive(
-                current_game_state, // Pass mutable S'
-                depth_remaining - 1,
-                visited_states,
-                current_moves_path,
-                nodes_explored,
-            ) {
-                // Update best_solution_found if this path is better
-                if best_solution_found.is_none()
-                    || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
-                {
-                    best_solution_found = Some(solution_from_this_path);
-                }
+        // Make the recursive call
+        if let Some(solution_from_this_path) = find_best_solution_recursive(
+            current_game_state, // Pass mutable S'
+            depth_remaining - 1,
+            visited_states,
+            current_moves_path,
+            nodes_explored,
+        ) {
+            // Update best_solution_found if this path is better
+            if best_solution_found.is_none()
+                || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
+            {
+                best_solution_found = Some(solution_from_this_path);
             }
-            // Backtrack: remove the last move from path for the next iteration
-            current_moves_path.pop();
         }
+        // Backtrack: remove the last move from path for the next iteration
+        current_moves_path.pop();
+
         // Crucially, always undo the move at the end of the loop iteration
-        // if the path was not pruned by the `continue` statement.
+        // as we are returning from the recursive call for this specific move.
         current_game_state.undo_last_move();
     }
     // Note on visited_states:
-        // The current implementation of `visited_states` (now a HashMap) is passed down and accumulates.
-        // It stores the max score found so far to reach a given board state.
-        // Paths leading to a known board state are only explored if they do so with a higher score.
+    // The current implementation of `visited_states` (now a HashMap) is passed down and accumulates.
+    // It stores the max score found so far to reach a given board state.
+    // Paths leading to a known board state are only explored if they do so with a higher score.
     // REMOVED EXTRA BRACE HERE
 
     // Fallback: If no moves were explored (e.g., all led to already visited states with lower/equal scores,
@@ -218,9 +214,9 @@ fn find_best_solution_recursive(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::heuristics::count_truly_isolated_tiles; // Corrected path
-    use crate::engine::{Game, Tile}; // BOARD_SIZE removed
-                                     // Removed local board_from_str_array and board_from_minimal_str_array
+    use crate::engine::{Game, Tile};
+    use crate::heuristics::count_truly_isolated_tiles; // Corrected path // BOARD_SIZE removed
+                                                       // Removed local board_from_str_array and board_from_minimal_str_array
 
     #[test]
     fn test_count_truly_isolated_tiles_none_isolated() {

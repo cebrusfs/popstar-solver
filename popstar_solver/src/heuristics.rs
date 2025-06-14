@@ -173,7 +173,9 @@ pub fn choose_move_crp(current_board: &Board) -> Option<(f64, (usize, usize))> {
             min_resulting_colors = resulting_colors;
             max_size_at_min_colors = current_candidate_size;
             best_group_choice = group_candidate.clone();
-        } else if resulting_colors == min_resulting_colors && current_candidate_size > max_size_at_min_colors {
+        } else if resulting_colors == min_resulting_colors
+            && current_candidate_size > max_size_at_min_colors
+        {
             max_size_at_min_colors = current_candidate_size;
             best_group_choice = group_candidate.clone();
         }
@@ -207,7 +209,7 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(f64, (usize, usize))>
         return None;
     }
 
-    const SINGLETON_PENALTY_FACTOR: i32 = 50;
+    const SINGLETON_PENALTY_FACTOR: i32 = 75; // Increased from 50 to 75
 
     let first_group = &available_groups[0];
     let first_immediate_score = (first_group.len() * first_group.len() * 5) as i32;
@@ -240,13 +242,125 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(f64, (usize, usize))>
             max_heuristic_value = heuristic_value;
             max_group_size_at_max_heuristic = current_candidate_size;
             best_group_choice = group_candidate.clone();
-        } else if heuristic_value == max_heuristic_value && current_candidate_size > max_group_size_at_max_heuristic {
+        } else if heuristic_value == max_heuristic_value
+            && current_candidate_size > max_group_size_at_max_heuristic
+        {
             max_group_size_at_max_heuristic = current_candidate_size;
             best_group_choice = group_candidate.clone();
         }
     }
     Some((max_heuristic_value as f64, best_group_choice[0]))
 }
+
+/// Chooses a move based on MISPS, with ClearFocus as a tie-breaker.
+///
+/// 1. Calculates MISPS value for all available groups.
+/// 2. Finds the maximum MISPS value.
+/// 3. Filters for candidate groups whose MISPS value is within a threshold (e.g., 90%)
+///    of the maximum MISPS value (if max is positive), or equal to max MISPS if max is non-positive.
+/// 4. Among these candidates, applies ClearFocus logic:
+///    - Simulates eliminating each candidate group.
+///    - Counts total remaining tiles on the resulting board.
+///    - Chooses the move leading to the minimum remaining tiles.
+///    - Tie-breaks further by the size of the original group eliminated (larger is better).
+/// The returned f64 is the actual MISPS score of the chosen group.
+pub fn choose_move_misps_clear_tiebreak(
+    current_board: &Board,
+) -> Option<(f64, (usize, usize))> {
+    let available_groups = current_board.find_all_groups();
+
+    if available_groups.is_empty() {
+        return None;
+    }
+
+    const SINGLETON_PENALTY_FACTOR: i32 = 75; // Same as in MISPS
+    let mut misps_scored_groups: Vec<(Vec<(usize, usize)>, i32)> = Vec::new();
+
+    // 1. Calculate MISPS value for all groups
+    for group_candidate_ref in &available_groups {
+        let group_candidate = group_candidate_ref.clone();
+        let immediate_score = (group_candidate.len() * group_candidate.len() * 5) as i32;
+
+        let mut temp_board_sim = current_board.clone();
+        temp_board_sim.eliminate_group(&group_candidate);
+        temp_board_sim.apply_gravity();
+        temp_board_sim.shift_columns();
+        let num_singletons = count_truly_isolated_tiles(&temp_board_sim);
+        let misps_value = immediate_score - (num_singletons as i32 * SINGLETON_PENALTY_FACTOR);
+        misps_scored_groups.push((group_candidate, misps_value));
+    }
+
+    if misps_scored_groups.is_empty() {
+        return None;
+    }
+
+    // 2. Find max_misps_value
+    let max_misps_value = misps_scored_groups.iter().map(|(_, val)| *val).max().unwrap_or(i32::MIN);
+
+    // 3. Modify candidate selection using threshold
+    const THRESHOLD_RATIO: f64 = 0.90;
+    let candidates_for_tiebreak: Vec<(Vec<(usize, usize)>, i32)>;
+
+    if max_misps_value > 0 {
+        let misps_threshold = (max_misps_value as f64 * THRESHOLD_RATIO) as i32;
+        candidates_for_tiebreak = misps_scored_groups
+            .into_iter() // Consumes misps_scored_groups
+            .filter(|(_, val)| *val >= misps_threshold)
+            .collect();
+    } else {
+        candidates_for_tiebreak = misps_scored_groups
+            .into_iter() // Consumes misps_scored_groups
+            .filter(|(_, val)| *val == max_misps_value)
+            .collect();
+    }
+
+    // Fallback: If thresholding resulted in an empty list,
+    // it means available_groups was empty, which is caught at the start.
+    // Or, if max_misps_value was positive but all candidates were below the threshold
+    // (e.g. max=10, threshold=9, all others are 5). In this case, the list will still contain the max_misps_value items.
+    // So, candidates_for_tiebreak should not be empty if available_groups was not empty.
+    if candidates_for_tiebreak.is_empty() {
+        return None;
+    }
+
+    // 4. Apply ClearFocus tie-breaking
+    let mut min_remaining_tiles = usize::MAX;
+    let mut best_group_info: Option<(Vec<(usize, usize)>, i32)> = None;
+    let mut tie_break_original_group_size = 0;
+
+    for (group_to_tiebreak, misps_score_of_this_candidate) in candidates_for_tiebreak {
+        let mut temp_board_sim = current_board.clone();
+        temp_board_sim.eliminate_group(&group_to_tiebreak);
+        temp_board_sim.apply_gravity();
+        temp_board_sim.shift_columns();
+
+        let mut current_remaining_tiles = 0;
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                if temp_board_sim.get_tile(r, c) != Tile::Empty {
+                    current_remaining_tiles += 1;
+                }
+            }
+        }
+
+        let current_candidate_original_size = group_to_tiebreak.len();
+
+        if best_group_info.is_none() || current_remaining_tiles < min_remaining_tiles {
+            min_remaining_tiles = current_remaining_tiles;
+            tie_break_original_group_size = current_candidate_original_size;
+            best_group_info = Some((group_to_tiebreak, misps_score_of_this_candidate));
+        } else if current_remaining_tiles == min_remaining_tiles {
+            if current_candidate_original_size > tie_break_original_group_size {
+                tie_break_original_group_size = current_candidate_original_size;
+                best_group_info = Some((group_to_tiebreak, misps_score_of_this_candidate));
+            }
+        }
+    }
+
+    // 5. Return the result with the actual MISPS score of the chosen group
+    best_group_info.map(|(chosen_group, misps_score)| (misps_score as f64, chosen_group[0]))
+}
+
 
 /// Chooses a move based on the Smallest Group Priority (SGP) strategy.
 ///
@@ -324,7 +438,7 @@ pub fn choose_move_clear_focus(current_board: &Board) -> Option<(f64, (usize, us
             max_original_group_size_at_min = current_candidate_original_size;
             best_group_choice = Some(group_candidate);
         } else if remaining_tiles_count == min_remaining_tiles {
-            if current_candidate_original_size > max_original_group_size_at_min {
+            if current_candidate_original_size > max_original_group_size_at_min { // Corrected variable name
                 max_original_group_size_at_min = current_candidate_original_size;
                 best_group_choice = Some(group_candidate);
             }
@@ -423,7 +537,9 @@ pub fn choose_move_avoid_orphans(current_board: &Board) -> Option<(f64, (usize, 
 ///   - `f64`: The calculated score for the chosen move (group size or 0).
 ///   - `(usize, usize)`: The coordinate of a representative tile from the chosen group.
 /// Returns `None` if no groups are available on the board.
-pub fn choose_move_preserve_largest_color_group(current_board: &Board) -> Option<(f64, (usize, usize))> {
+pub fn choose_move_preserve_largest_color_group(
+    current_board: &Board,
+) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
@@ -436,7 +552,7 @@ pub fn choose_move_preserve_largest_color_group(current_board: &Board) -> Option
         // Get the color of the first tile in the largest group
         // lg[0] is (row, col). We need to get the tile at this coordinate.
         let (r, c) = lg[0];
-        current_board.get_tile(r,c)
+        current_board.get_tile(r, c)
     });
 
     if color_to_preserve.is_none() || color_to_preserve == Some(Tile::Empty) {
@@ -477,7 +593,6 @@ pub fn choose_move_preserve_largest_color_group(current_board: &Board) -> Option
     best_group_choice.map(|group| (max_score, group[0]))
 }
 
-
 /// Chooses a move based on maximizing the size of the largest group on the *next* board state.
 ///
 /// This "Connectivity/Consolidation Focus" strategy simulates eliminating each available group (`G1`).
@@ -515,12 +630,18 @@ pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (us
         let current_max_next_group_size = if groups_on_sim_board.is_empty() {
             0
         } else {
-            groups_on_sim_board.iter().map(|g| g.len()).max().unwrap_or(0)
+            groups_on_sim_board
+                .iter()
+                .map(|g| g.len())
+                .max()
+                .unwrap_or(0)
         };
 
         let current_g1_original_size = group_g1_candidate.len();
 
-        if best_group_choice.is_none() || (current_max_next_group_size as f64) > max_future_group_size {
+        if best_group_choice.is_none()
+            || (current_max_next_group_size as f64) > max_future_group_size
+        {
             max_future_group_size = current_max_next_group_size as f64;
             best_original_group_size = current_g1_original_size;
             best_group_choice = Some(group_g1_candidate);
@@ -534,7 +655,6 @@ pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (us
 
     best_group_choice.map(|group| (max_future_group_size, group[0]))
 }
-
 
 /// Evaluates a game state by playing it out until the end using a specified heuristic strategy.
 ///
@@ -551,16 +671,18 @@ pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (us
 ///   as moves are played.
 ///
 /// # Returns
-/// The final score (`u32`) achieved after playing the game to completion using the
-/// `choose_move_misps` heuristic. This score includes any end-game bonus.
+/// The final score (`i32`) achieved after playing the game to completion using the
+/// `choose_move_misps` heuristic. This score includes any end-game bonus and can be negative.
 ///
 /// # Warnings
 /// This function prints warnings to `eprintln!` if `choose_move_misps` returns an empty group
 /// (which should not happen for a valid board with groups) or if `process_move` fails for a
 /// chosen group (which also indicates an inconsistency).
-pub fn evaluate_with_heuristic(mut game_state: Game) -> u32 {
+pub fn evaluate_with_heuristic(mut game_state: Game) -> i32 {
+    // Changed to i32
     while !game_state.is_game_over() {
-        if let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(game_state.board()) {
+        if let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(game_state.board())
+        {
             let (r_click, c_click) = chosen_group_coord;
 
             if !game_state.process_move(r_click, c_click) {
@@ -640,55 +762,36 @@ mod tests {
             "Empty board heuristic"
         );
 
-        let board_mixed_no_groups = board_from_str_array(&[
-            "R B",
-            "Y G",
-        ])
-        .unwrap();
+        let board_mixed_no_groups = board_from_str_array(&["RB", "YG"]).unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_mixed_no_groups),
             5 * 4 + 2000,
             "Mixed colors, no groups"
         );
 
-        let board_potential_groups = board_from_str_array(&[
-            "R R R G",
-            "B B . .",
-        ])
-        .unwrap();
+        let board_potential_groups = board_from_str_array(&["RRRG", "BB.."]).unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_potential_groups),
             (3 * 3 * 5) + 5 + (2 * 2 * 5) + 2000,
             "Potential groups"
         );
 
-        let board_all_red_small = board_from_str_array(&[
-            "R R",
-            "R R",
-        ])
-        .unwrap();
+        let board_all_red_small = board_from_str_array(&["RR", "RR"]).unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_all_red_small),
             (4 * 4 * 5) + 2000,
             "All Red (4 tiles)"
         );
 
-        let red_tiles_rows = vec!["R R R R R"; 5];
-        let board_many_red =
-            board_from_str_array(&red_tiles_rows)
-                .unwrap();
+        let red_tiles_rows = vec!["RRRRR"; 5];
+        let board_many_red = board_from_str_array(&red_tiles_rows).unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_many_red),
             (25 * 25 * 5) + 2000,
             "Many Red tiles (25 tiles)"
         );
 
-        let board_mixed_with_empty = board_from_str_array(&[
-            "R . B",
-            ". G .",
-            "Y . P",
-        ])
-        .unwrap();
+        let board_mixed_with_empty = board_from_str_array(&["R.B", ".G.", "Y.P"]).unwrap();
         assert_eq!(
             calculate_admissible_heuristic(&board_mixed_with_empty),
             5 * 5 + 2000,
