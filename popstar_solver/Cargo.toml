@@ -20,3 +20,7 @@ path = "src/bin/ai_solver.rs"
 [[bin]]
 name = "heuristic_evaluator"
 path = "src/bin/heuristic_evaluator.rs"
+
+[[bin]]
+name = "evaluator"
+path = "src/bin/evaluator.rs"

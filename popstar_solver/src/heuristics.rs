@@ -39,24 +39,23 @@ pub fn count_unique_colors(board: &Board) -> usize {
 /// The total count of truly isolated tiles as `u32`.
 pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
     let mut isolated_count = 0;
-    let mut visited = [[false; BOARD_SIZE]; BOARD_SIZE];
-
-    for r_idx in 0..BOARD_SIZE {
-        for c_idx in 0..BOARD_SIZE {
-            if !visited[r_idx][c_idx] && board.get_tile(r_idx, c_idx) != Tile::Empty {
-                let group = board.find_group(r_idx, c_idx);
-                if group.len() >= 2 {
-                    for &(r, c) in &group {
-                        visited[r][c] = true;
-                    }
-                } else {
-                    visited[r_idx][c_idx] = true;
+    let grid = board.get_grid();
+    for r in 0..crate::engine::BOARD_SIZE {
+        for c in 0..crate::engine::BOARD_SIZE {
+            let tile = grid[r][c];
+            if tile != Tile::Empty {
+                let mut isolated = true;
+                if r > 0 && grid[r - 1][c] == tile { isolated = false; }
+                else if r + 1 < crate::engine::BOARD_SIZE && grid[r + 1][c] == tile { isolated = false; }
+                else if c > 0 && grid[r][c - 1] == tile { isolated = false; }
+                else if c + 1 < crate::engine::BOARD_SIZE && grid[r][c + 1] == tile { isolated = false; }
+                
+                if isolated {
                     isolated_count += 1;
                 }
             }
         }
     }
-
     isolated_count
 }
 
@@ -264,9 +263,7 @@ pub fn choose_move_misps(current_board: &Board) -> Option<(f64, (usize, usize))>
 ///    - Chooses the move leading to the minimum remaining tiles.
 ///    - Tie-breaks further by the size of the original group eliminated (larger is better).
 /// The returned f64 is the actual MISPS score of the chosen group.
-pub fn choose_move_misps_clear_tiebreak(
-    current_board: &Board,
-) -> Option<(f64, (usize, usize))> {
+pub fn choose_move_misps_clear_tiebreak(current_board: &Board) -> Option<(f64, (usize, usize))> {
     let available_groups = current_board.find_all_groups();
 
     if available_groups.is_empty() {
@@ -295,7 +292,11 @@ pub fn choose_move_misps_clear_tiebreak(
     }
 
     // 2. Find max_misps_value
-    let max_misps_value = misps_scored_groups.iter().map(|(_, val)| *val).max().unwrap_or(i32::MIN);
+    let max_misps_value = misps_scored_groups
+        .iter()
+        .map(|(_, val)| *val)
+        .max()
+        .unwrap_or(i32::MIN);
 
     // 3. Modify candidate selection using threshold
     const THRESHOLD_RATIO: f64 = 0.90;
@@ -360,7 +361,6 @@ pub fn choose_move_misps_clear_tiebreak(
     // 5. Return the result with the actual MISPS score of the chosen group
     best_group_info.map(|(chosen_group, misps_score)| (misps_score as f64, chosen_group[0]))
 }
-
 
 /// Chooses a move based on the Smallest Group Priority (SGP) strategy.
 ///
@@ -438,7 +438,8 @@ pub fn choose_move_clear_focus(current_board: &Board) -> Option<(f64, (usize, us
             max_original_group_size_at_min = current_candidate_original_size;
             best_group_choice = Some(group_candidate);
         } else if remaining_tiles_count == min_remaining_tiles {
-            if current_candidate_original_size > max_original_group_size_at_min { // Corrected variable name
+            if current_candidate_original_size > max_original_group_size_at_min {
+                // Corrected variable name
                 max_original_group_size_at_min = current_candidate_original_size;
                 best_group_choice = Some(group_candidate);
             }
@@ -678,24 +679,20 @@ pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (us
 /// This function prints warnings to `eprintln!` if `choose_move_misps` returns an empty group
 /// (which should not happen for a valid board with groups) or if `process_move` fails for a
 /// chosen group (which also indicates an inconsistency).
-pub fn evaluate_with_heuristic(mut game_state: Game) -> u32 {
-    while !game_state.is_game_over() {
-        if let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(game_state.board())
-        {
-            let (r_click, c_click) = chosen_group_coord;
+pub fn evaluate_with_heuristic(game_state: Game) -> u32 {
+    let mut simulated_board = game_state.board().clone();
+    let mut simulated_score = game_state.score();
 
-            if !game_state.process_move(r_click, c_click) {
-                eprintln!(
-                    "Warning: evaluate_with_heuristic using MISPS chose click ({},{}) but process_move failed. Board:\n{}",
-                    r_click, c_click, game_state.board()
-                );
-                break;
-            }
-        } else {
-            break;
-        }
+    while let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(&simulated_board) {
+        let (r_click, c_click) = chosen_group_coord;
+        let gained = simulated_board.eliminate_group_by_click(r_click, c_click);
+        if gained == 0 { break; }
+        simulated_score += gained;
+        simulated_board.apply_gravity();
+        simulated_board.shift_columns();
     }
-    game_state.final_score().try_into().unwrap()
+    
+    simulated_score + simulated_board.calculate_bonus()
 }
 
 /// Calculates an admissible heuristic for a given board state.

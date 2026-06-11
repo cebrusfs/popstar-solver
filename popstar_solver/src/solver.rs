@@ -2,6 +2,7 @@ use crate::engine::{Board, Game};
 use std::collections::HashMap;
 
 // Re-export the heuristic functions for backward compatibility
+use crate::heuristics::calculate_admissible_heuristic;
 pub use crate::heuristics::evaluate_with_heuristic;
 
 /// Represents a solution found by the solver.
@@ -49,17 +50,19 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
     let mut visited_states = HashMap::new(); // Changed from HashSet to HashMap
                                              // Insert the initial state with its current score.
                                              // The score for the initial state is initial_game.score() (usually 0).
-    visited_states.insert(initial_game.board().clone(), initial_game.score());
+    visited_states.insert(initial_game.board().to_packed(), initial_game.score());
 
     let mut nodes_explored_dfs: u32 = 0;
     let mut game_instance = initial_game.clone();
     let mut moves_path = Vec::new();
+    let mut global_best_score: u32 = 0;
     let solution_opt = find_best_solution_recursive(
         &mut game_instance,
         depth_limit,
         &mut visited_states,
         &mut moves_path,
         &mut nodes_explored_dfs,
+        &mut global_best_score,
     );
     (solution_opt, nodes_explored_dfs)
 }
@@ -85,17 +88,29 @@ pub fn solve_dfs(initial_game: &Game, depth_limit: u32) -> (Option<Solution>, u3
 fn find_best_solution_recursive(
     current_game_state: &mut Game,
     depth_remaining: u32,
-    visited_states: &mut HashMap<Board, u32>, // Changed type from HashSet<Board>
+    visited_states: &mut HashMap<[u64; 5], u32>, // Changed type from HashSet<Board>
     current_moves_path: &mut Vec<(usize, usize)>,
     nodes_explored: &mut u32,
+    global_best_score: &mut u32,
 ) -> Option<Solution> {
     *nodes_explored += 1;
 
+    // Pruning: Branch and Bound
+    let upper_bound =
+        current_game_state.score() + calculate_admissible_heuristic(current_game_state.board());
+    if upper_bound <= *global_best_score {
+        return None;
+    }
+
     // Base case: Game is over (no more moves possible).
     if current_game_state.is_game_over() {
+        let final_score = current_game_state.final_score();
+        if final_score > *global_best_score {
+            *global_best_score = final_score;
+        }
         return Some(Solution {
             moves: current_moves_path.clone(),
-            score: current_game_state.final_score(),
+            score: final_score,
             steps_taken: current_game_state.steps(),
         });
     }
@@ -105,6 +120,9 @@ fn find_best_solution_recursive(
     if depth_remaining == 0 {
         let steps = current_game_state.steps();
         let heuristic_score = evaluate_with_heuristic(current_game_state.clone());
+        if heuristic_score > *global_best_score {
+            *global_best_score = heuristic_score;
+        }
         return Some(Solution {
             moves: current_moves_path.clone(),
             score: heuristic_score,
@@ -135,7 +153,7 @@ fn find_best_solution_recursive(
             "A group identified by find_all_groups should always be a valid move."
         );
 
-        let board_after_move = current_game_state.board().clone();
+        let board_after_move = current_game_state.board().to_packed();
         let current_score_at_board = current_game_state.score();
 
         match visited_states.get(&board_after_move) {
@@ -153,12 +171,14 @@ fn find_best_solution_recursive(
 
         current_moves_path.push((r_click, c_click));
 
+        // Make the recursive call
         if let Some(solution_from_this_path) = find_best_solution_recursive(
-            current_game_state,
+            current_game_state, // Pass mutable S'
             depth_remaining - 1,
             visited_states,
             current_moves_path,
             nodes_explored,
+            global_best_score,
         ) {
             if best_solution_found.is_none()
                 || solution_from_this_path.score > best_solution_found.as_ref().unwrap().score
@@ -178,9 +198,13 @@ fn find_best_solution_recursive(
     if best_solution_found.is_none() {
         // This can happen if all moves lead to states already in `visited_states` or if `available_groups` was empty
         // (which should ideally be caught by `is_game_over` or `available_groups.is_empty()` checks earlier).
+        let final_score = current_game_state.final_score();
+        if final_score > *global_best_score {
+            *global_best_score = final_score;
+        }
         return Some(Solution {
             moves: current_moves_path.clone(),
-            score: current_game_state.final_score(),
+            score: final_score,
             steps_taken: current_game_state.steps(),
         });
     }
@@ -196,33 +220,19 @@ mod tests {
 
     #[test]
     fn test_count_truly_isolated_tiles_none_isolated() {
-        let board = crate::utils::board_from_str_array(&[
-            "RR",
-            "GG",
-        ])
-        .unwrap();
+        let board = crate::utils::board_from_str_array(&["RR", "GG"]).unwrap();
         assert_eq!(count_truly_isolated_tiles(&board), 0);
     }
 
     #[test]
     fn test_count_truly_isolated_tiles_some_isolated() {
-        let board = crate::utils::board_from_str_array(&[
-            "R.B",
-            "G.Y",
-            "PP",
-        ])
-        .unwrap();
+        let board = crate::utils::board_from_str_array(&["R.B", "G.Y", "PP"]).unwrap();
         assert_eq!(count_truly_isolated_tiles(&board), 4);
     }
 
     #[test]
     fn test_count_truly_isolated_tiles_all_isolated() {
-        let board = crate::utils::board_from_str_array(&[
-            "RGYB",
-            "PYG.",
-            "RBPY",
-        ])
-        .unwrap();
+        let board = crate::utils::board_from_str_array(&["RGYB", "PYG.", "RBPY"]).unwrap();
         let expected_isolated = board
             .get_grid()
             .iter()

@@ -32,7 +32,6 @@ pub enum Tile {
     Purple,
 }
 
-
 impl Tile {
     // Removed Tile::random_color(rng: &mut u32)
 
@@ -319,6 +318,114 @@ impl Board {
     /// # Returns
     /// A `Vec<Vec<(usize, usize)>>` where each inner vector represents a group of tile coordinates.
     /// Returns an empty vector if no groups of 2 or more tiles are found on the board.
+
+    pub fn find_all_group_clicks_with_len(&self) -> Vec<((usize, usize), usize)> {
+        let mut clicks = Vec::with_capacity(50);
+        let mut visited = [[false; crate::engine::BOARD_SIZE]; crate::engine::BOARD_SIZE];
+        let mut q = [(0usize, 0usize); 100];
+
+        let dr = [-1, 1, 0, 0];
+        let dc = [0, 0, -1, 1];
+
+        for r_idx in 0..crate::engine::BOARD_SIZE {
+            for c_idx in 0..crate::engine::BOARD_SIZE {
+                let tile_kind = self.grid[r_idx][c_idx];
+                if tile_kind != Tile::Empty && !visited[r_idx][c_idx] {
+                    let mut q_head = 0;
+                    let mut q_tail = 0;
+
+                    q[q_tail] = (r_idx, c_idx);
+                    q_tail += 1;
+                    visited[r_idx][c_idx] = true;
+
+                    while q_head < q_tail {
+                        let (curr_r, curr_c) = q[q_head];
+                        q_head += 1;
+
+                        for i in 0..4 {
+                            let nr_signed = curr_r as isize + dr[i];
+                            let nc_signed = curr_c as isize + dc[i];
+
+                            if nr_signed >= 0
+                                && nr_signed < crate::engine::BOARD_SIZE as isize
+                                && nc_signed >= 0
+                                && nc_signed < crate::engine::BOARD_SIZE as isize
+                            {
+                                let nr = nr_signed as usize;
+                                let nc = nc_signed as usize;
+
+                                if !visited[nr][nc] && self.grid[nr][nc] == tile_kind {
+                                    visited[nr][nc] = true;
+                                    q[q_tail] = (nr, nc);
+                                    q_tail += 1;
+                                }
+                            }
+                        }
+                    }
+
+                    if q_tail >= 2 {
+                        let mut group = &mut q[..q_tail];
+                        group.sort_unstable();
+                        clicks.push((group[0], q_tail));
+                    }
+                }
+            }
+        }
+        clicks.sort_unstable_by_key(|&(pos, _)| pos);
+        clicks
+    }
+
+    pub(crate) fn eliminate_group_by_click(&mut self, r: usize, c: usize) -> u32 {
+        let tile_kind = self.grid[r][c];
+        if tile_kind == Tile::Empty {
+            return 0;
+        }
+
+        let mut q = [(0usize, 0usize); 100];
+        let mut q_head = 0;
+        let mut q_tail = 0;
+
+        q[q_tail] = (r, c);
+        q_tail += 1;
+        self.grid[r][c] = Tile::Empty;
+
+        let dr = [-1, 1, 0, 0];
+        let dc = [0, 0, -1, 1];
+
+        while q_head < q_tail {
+            let (curr_r, curr_c) = q[q_head];
+            q_head += 1;
+
+            for i in 0..4 {
+                let nr_signed = curr_r as isize + dr[i];
+                let nc_signed = curr_c as isize + dc[i];
+
+                if nr_signed >= 0
+                    && nr_signed < crate::engine::BOARD_SIZE as isize
+                    && nc_signed >= 0
+                    && nc_signed < crate::engine::BOARD_SIZE as isize
+                {
+                    let nr = nr_signed as usize;
+                    let nc = nc_signed as usize;
+
+                    if self.grid[nr][nc] == tile_kind {
+                        self.grid[nr][nc] = Tile::Empty;
+                        q[q_tail] = (nr, nc);
+                        q_tail += 1;
+                    }
+                }
+            }
+        }
+
+        if q_tail >= 2 {
+            let n = q_tail as u32;
+            n * n * 5
+        } else {
+            self.grid[r][c] = tile_kind;
+            0
+        }
+    }
+
     pub fn find_all_groups(&self) -> Vec<Vec<(usize, usize)>> {
         let mut all_groups = Vec::new();
         let mut visited_for_all_groups = [[false; BOARD_SIZE]; BOARD_SIZE]; // Tracks tiles already part of a found group
@@ -445,6 +552,31 @@ impl Board {
     ///
     /// # Returns
     /// The calculated bonus score as a `u32`.
+    pub fn to_packed(&self) -> [u64; 5] {
+        let mut packed = [0u64; 5];
+        let mut word_idx = 0;
+        let mut bit_offset = 0;
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                let val = match self.grid[r][c] {
+                    Tile::Empty => 0,
+                    Tile::Red => 1,
+                    Tile::Green => 2,
+                    Tile::Blue => 3,
+                    Tile::Yellow => 4,
+                    Tile::Purple => 5,
+                };
+                packed[word_idx] |= val << bit_offset;
+                bit_offset += 3;
+                if bit_offset >= 63 {
+                    bit_offset = 0;
+                    word_idx += 1;
+                }
+            }
+        }
+        packed
+    }
+
     pub fn calculate_bonus(&self) -> u32 {
         let mut remaining_count = 0;
         for r in 0..BOARD_SIZE {
@@ -582,27 +714,20 @@ impl Game {
     /// * `false` if the coordinates are out of bounds, the selected tile is `Tile::Empty`,
     ///   or no valid group of 2 or more tiles is found at `(r, c)`.
     pub fn process_move(&mut self, r: usize, c: usize) -> bool {
-        // Check if click is outside board boundaries
         if r >= BOARD_SIZE || c >= BOARD_SIZE {
             return false;
         }
 
-        // No valid group (less than 2 tiles, or clicked on an Empty tile)
-        let group = self.board.find_group(r, c);
-        if group.is_empty() {
+        let score_gained = self.board.eliminate_group_by_click(r, c);
+        if score_gained == 0 {
             return false;
         }
 
-        // A valid group was found, proceed with the move
-        let score_gained = self.board.eliminate_group(&group);
         self.current_score += score_gained;
-
         self.board.apply_gravity();
         self.board.shift_columns();
-
         self.steps += 1;
 
-        // Save current state to history for potential undo
         self.history
             .push((self.board.clone(), self.current_score, self.steps));
 
@@ -646,7 +771,16 @@ impl Game {
     /// # Returns
     /// `true` if no more moves can be made (game is over), `false` otherwise.
     pub fn is_game_over(&self) -> bool {
-        self.board.find_all_groups().is_empty()
+        for r in 0..crate::engine::BOARD_SIZE {
+            for c in 0..crate::engine::BOARD_SIZE {
+                let tile = self.board.get_grid()[r][c];
+                if tile != Tile::Empty {
+                    if r + 1 < crate::engine::BOARD_SIZE && self.board.get_grid()[r + 1][c] == tile { return false; }
+                    if c + 1 < crate::engine::BOARD_SIZE && self.board.get_grid()[r][c + 1] == tile { return false; }
+                }
+            }
+        }
+        true
     }
 
     /// Calculates the final score of the game.
@@ -1377,7 +1511,11 @@ mod tests {
         assert_eq!(game.history.len(), 1);
         for r in 0..BOARD_SIZE {
             for c in 0..BOARD_SIZE {
-                assert_eq!(game.board().get_tile(r, c), Tile::Empty, "Game::new() should create an all-empty board");
+                assert_eq!(
+                    game.board().get_tile(r, c),
+                    Tile::Empty,
+                    "Game::new() should create an all-empty board"
+                );
             }
         }
     }

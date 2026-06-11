@@ -2,8 +2,7 @@ use popstar_solver::engine::{Board, Game};
 use popstar_solver::heuristics::{
     choose_move_avoid_orphans, choose_move_clear_focus, choose_move_connectivity_focus,
     choose_move_crp, choose_move_lgp, choose_move_mis, choose_move_misps,
-    choose_move_misps_clear_tiebreak, choose_move_preserve_largest_color_group,
-    choose_move_sgp,
+    choose_move_misps_clear_tiebreak, choose_move_preserve_largest_color_group, choose_move_sgp,
 };
 use std::collections::HashMap;
 
