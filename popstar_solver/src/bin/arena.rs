@@ -184,6 +184,110 @@ impl Agent for ArenaSpMctsAgent {
     }
 }
 
+struct BmctsAgent {
+    beam_width: usize,
+    rollout_count: usize,
+}
+impl Agent for BmctsAgent {
+    fn name(&self) -> &str {
+        "BMCTS-W100-N20"
+    }
+    fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
+        let start = Instant::now();
+
+        let mut beam: Vec<(Board, i32)> = vec![(initial_board.clone(), 0)];
+        let mut best_final_score = 0;
+        let mut min_remaining = usize::MAX;
+
+        loop {
+            let mut next_beam: Vec<(Board, i32)> = Vec::new();
+            let mut all_game_over = true;
+
+            for (board, score) in beam {
+                if board.is_game_over() {
+                    let temp = Game::new_with_board(board.clone());
+                    let final_score = score + temp.final_score() as i32;
+                    if final_score > best_final_score {
+                        best_final_score = final_score;
+                    }
+                    let remaining = count_remaining(&board);
+                    if remaining < min_remaining {
+                        min_remaining = remaining;
+                    }
+                    continue;
+                }
+                all_game_over = false;
+
+                let groups = board.find_all_group_clicks_with_len();
+                for ((r, c), len) in groups {
+                    let mut next_board = board.clone();
+                    next_board.eliminate_group_by_click(r, c);
+                    next_board.apply_gravity();
+                    next_board.shift_columns();
+
+                    let move_score = (len * len * 5) as i32;
+                    let next_score = score + move_score;
+                    next_beam.push((next_board, next_score));
+                }
+            }
+
+            if all_game_over || next_beam.is_empty() {
+                break;
+            }
+
+            let mut unique_states: HashMap<[u32; 10], (Board, i32)> = HashMap::new();
+            for (board, score) in next_beam {
+                let mut key = [0u32; 10];
+                key.copy_from_slice(board.columns());
+                if let Some(&(_, old_score)) = unique_states.get(&key) {
+                    if score > old_score {
+                        unique_states.insert(key, (board, score));
+                    }
+                } else {
+                    unique_states.insert(key, (board, score));
+                }
+            }
+
+            let mut unique_vec: Vec<(Board, i32)> = unique_states.into_values().collect();
+
+            unique_vec.sort_by_cached_key(|(b, s)| {
+                let mut total_rollout_score = 0;
+                for _ in 0..self.rollout_count {
+                    let mut rollout_board = b.clone();
+                    let mut r_score = 0;
+                    while !rollout_board.is_game_over() {
+                        let groups = rollout_board.find_all_group_clicks_with_len();
+                        if groups.is_empty() { break; }
+                        let mut max_len = 0;
+                        let mut best_move = (0, 0);
+                        for &(pos, len) in &groups {
+                            if len > max_len {
+                                max_len = len;
+                                best_move = pos;
+                            }
+                        }
+                        let move_score = max_len * max_len * 5;
+                        r_score += move_score as i32;
+                        rollout_board.eliminate_group_by_click(best_move.0, best_move.1);
+                        rollout_board.apply_gravity();
+                        rollout_board.shift_columns();
+                    }
+                    let final_bonus = Game::new_with_board(rollout_board).final_score() as i32;
+                    total_rollout_score += r_score + final_bonus;
+                }
+                let avg_rollout_score = total_rollout_score / (self.rollout_count as i32);
+                let combined_score = *s + avg_rollout_score;
+                
+                std::cmp::Reverse(combined_score)
+            });
+
+            unique_vec.truncate(self.beam_width);
+            beam = unique_vec;
+        }
+
+        (best_final_score as i32, start.elapsed().as_secs_f64(), min_remaining)
+    }
+}
 
 fn main() {
     println!("=== PopStar AI Arena ===");
@@ -195,6 +299,7 @@ fn main() {
     let seeds: Vec<u64> = (1..=total_games).map(|x| x as u64).collect();
 
     let greedy_agent = GreedyAgent;
+    let bmcts_agent = BmctsAgent { beam_width: 100, rollout_count: 20 };
     let beam_agent_50 = BeamSearchAgent { name: "BeamSearch-W50-V2".to_string(), beam_width: 50, heuristic: calculate_predictive_heuristic };
     let beam_agent_500 = BeamSearchAgent { name: "BeamSearch-W500-V2".to_string(), beam_width: 500, heuristic: calculate_predictive_heuristic };
     let beam_agent_5000 = BeamSearchAgent { name: "BeamSearch-W5000-V2".to_string(), beam_width: 5000, heuristic: calculate_predictive_heuristic };
@@ -208,6 +313,7 @@ fn main() {
     let nrpa_l3_20 = ArenaNrpaAgent { level: 3, iterations: 20, alpha: 1.0 };
     let nrpa_l3_40 = ArenaNrpaAgent { level: 3, iterations: 40, alpha: 1.0 };
     let agents: Vec<&dyn Agent> = vec![
+        &bmcts_agent,
         &beam_agent_5000,
         &beam_agent_500,
         &sp_mcts_agent,
