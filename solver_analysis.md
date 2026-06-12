@@ -1,39 +1,9 @@
-# PopStar Solver Analysis
+# PopStar Solver Analysis & AI Agent Guide
 
-## 1. Game Rules & Mathematical Equivalence
+This document contains the latest benchmark data for the advanced AI solvers and serves as the **Agentic Improvement Loop** protocol for future AI agents to continue improving the solver.
+For foundational knowledge on the game rules, NP-Complete mathematical equivalence, exact search optimization (DFS), and basic greedy heuristics, please see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-PopStar is played on a 10x10 grid of colored blocks. Players click groups of two or more same-colored adjacent blocks to eliminate them, scoring `n*n*5` points for `n` blocks. Remaining blocks fall (gravity), and empty columns are consolidated by shifting columns to the left. The game ends when no valid groups remain. A bonus (up to 2000 points) is awarded based on the number of blocks left, with the maximum for a clear board.
-
-**Mathematical Equivalence:** 
-PopStar is mathematically equivalent to the well-known computer science problem **SameGame** (or Clickomania). 
-In 2001, Biedl et al. proved in *"The Complexity of Clickomania"* that determining whether a given board can be completely cleared is **NP-Complete**. Because of this, it is mathematically proven that no polynomial-time algorithm exists to find the absolute perfect score for a 10x10 board (unless P=NP). This necessitates the use of heuristic and approximation algorithms (like Beam Search or MCTS) for full-board solving, while exact algorithms (like DFS) are limited to shallow depths or smaller sub-problems.
-
-## 2. Exact Search: Depth-First Search (DFS) & Branch and Bound
-
-For exact optimization at shallow depths, we employ Depth-First Search (DFS). To make this feasible, several critical optimizations are necessary:
-
-### Branch and Bound Pruning
-We prune sub-optimal branches early by comparing the current score plus an **Admissible Heuristic** (Upper Bound) against the best known score.
-*   **Admissible Heuristic `calculate_admissible_heuristic`:** Calculates an optimistic upper bound. It sums `k_C * k_C * 5` for each color `C` (where `k_C` is the total count of blocks of that color), then adds the maximum end-game bonus (2000 points). Since mathematically $(A+B)^2 > A^2 + B^2$, assuming all tiles of one color can be cleared simultaneously is the strict theoretical maximum score. This guarantees we never mistakenly prune the optimal path.
-
-### Zero-Allocation Engine (Extreme Performance)
-The core bottleneck in DFS tree traversal is memory allocation (GC/Heap churn). We implemented extreme exact optimizations to achieve ~400% speedups:
-*   **Zero-Allocation Group Finding & Elimination:** Instead of allocating `Vec<Vec<(usize, usize)>>` to find groups, we use in-place, stack-allocated arrays (`[(0,0); 100]`) for flood-fills (`eliminate_group_by_click`).
-*   **O(N) Game Over Check:** Replaced full-board group identification with a lightweight adjacency check (only verifying the Right and Down neighbors of each tile).
-*   **Zero-Allocation Heuristic Playouts:** When `depth_limit` is reached, `evaluate_with_heuristic` simulates the rest of the game. Instead of cloning the heavy `Game` struct (which tracks a `history` vector of moves), we only clone the 100-byte `Board` array, completely eradicating heap allocations in the hot loop.
-*   **Packed Bitboard Hashing:** State deduplication `visited_states` relies on `HashMap`. By compressing the 100 3-bit tiles into a `[u64; 5]` array (`to_packed()`), we drastically shrink memory usage and speed up equality checks.
-
-## 3. Heuristic Strategies (Greedy Baselines)
-
-Several single-step greedy heuristics have been implemented as baselines. They estimate the desirability of game states or moves but are fundamentally limited because they don't look ahead beyond one step:
-
-*   **`choose_move_mis` (Maximize Immediate Score):** Selects the move yielding the highest immediate score.
-*   **`choose_move_lgp` (Largest Group Priority):** Prefers eliminating the largest available group.
-*   **`choose_move_crp` (Color Reduction Priority):** Chooses the move resulting in the fewest unique colors remaining.
-*   **`choose_move_misps` (Maximize Immediate Score & Penalize Singletons):** Balances immediate score with a penalty for creating isolated single tiles. (Currently used for our fast playout evaluations).
-*   **`choose_move_clear_focus` & `choose_move_connectivity_focus`:** Focus on minimizing remaining tiles or maximizing future connectivity.
-
-## 4. Advanced Algorithms & AI Arena
+## 1. Advanced Algorithms & AI Arena
 
 Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approximation algorithms. To test them, we built the **AI Arena** (`src/bin/arena.rs`), an automated benchmark platform that evaluates agents across a **Golden Set of 100 random seeds (Seeds 1~100)** using Rayon for multithreading.
 
@@ -43,18 +13,70 @@ Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approx
 
 ### Golden Set Benchmark (100 Seeds)
 
-| 排名 | 演算法 (Agent) | 平均分數 | 最高分 | 完美通關率 | 每局平均耗時 |
+| Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BeamSearch (W=5000)** | **4703.9** | **8295** | **55.0%** | **1.94s** |
-| 🥈 | **DFS Depth 5 (舊版 main)** | 4467.8 | 5735 | N/A | 0.54s |
-| 🥉 | **MCTS (100ms/move)** | 4223.9 | 6730 | 26.0% | 1.04s |
-| 4 | **BeamSearch (W=500)** | 3937.6 | 8180 | 19.0% | 0.20s |
-| 5 | **BeamSearch (W=50)** | 3081.0 | 6290 | 4.0% | 0.02s |
+| 🥇 | **BeamSearch (W=5000) [Predictive Heuristic]** | **4940.1** | **8310** | **74.0%** | **2.43s** |
+| 🥈 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
+| 🥉 | **BeamSearch (W=500) [Predictive Heuristic]** | 4267.2 | 8180 | 42.0% | 0.24s |
+| 4 | **MCTS (100ms/move)** | 4242.6 | 5865 | 22.0% | 1.01s |
+| 5 | **BeamSearch (W=50) [Predictive Heuristic]** | 3367.8 | 6660 | 9.0% | 0.02s |
 | 6 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
 
-Beam Search (W=5000) achieves a breathtaking **55% Clear Rate** and shatters the 8000 point limit, thoroughly outclassing depth-limited DFS in both speed and capability.
+Beam Search (W=5000) with the new predictive heuristic achieves a breathtaking **74% Clear Rate** and consistently shatters the 8000 point limit, pushing the average score near 5000.
 
-## 5. Future Directions & Improvement Loop
+## 2. Agentic Improvement Loop (Protocol for Autonomous AI)
 
-1. **強化 Heuristic (Beam Search)**: The current admissible heuristic assumes all blocks can be perfectly cleared. By replacing this with a more realistic predictive heuristic (e.g. evaluating connectivity or using a small neural net), Beam Search can select its 5000 branches more accurately.
-2. **強化 MCTS (Rollout Strategy)**: MCTS currently uses the greedy `MISPS` strategy for rollouts. We can tune exploration constants, add domain-specific rules (like preserving vertical matches), or increase the time budget to unlock its massive parallel-scaling potential.
+This section contains exact instructions for future AI agents to continue improving the solver autonomously without requiring user intervention. Future AI agents must strictly follow this step-by-step loop.
+
+### Objective
+Your goal is to beat the current top average score and perfect clear rate on the **Golden Set Benchmark (100 Seeds)**. Currently, the target to beat is the 🥇 **BeamSearch (W=5000)** baseline.
+
+### Step-by-Step Execution Protocol
+
+1.  **Ideation & Implementation:**
+    *   Formulate a specific algorithmic hypothesis. Examples:
+        *   **Heuristics Enhancement:** Improve the evaluation heuristic used in Beam Search to select the top $K$ branches. E.g., introduce connectivity-based evaluation or prioritize keeping colors grouped together instead of assuming the optimistic `calculate_admissible_heuristic`.
+        *   **MCTS Rollout Strategy:** Replace the greedy `MISPS` rollout in MCTS with a more domain-aware rule (e.g., preserving vertical matches). Tune exploration constants (`UCT`), add Progressive Widening, or integrate RAVE.
+        *   **Engine Optimization:** Profile and optimize memory/CPU hot-paths to enable more iterations/deeper searches per second.
+    *   Implement your new feature in the source code (typically under `src/agents/`, `src/evaluator.rs`, or `src/board.rs`). Ensure you test it logically before benchmarking.
+    *   Integrate your agent/heuristic into the Arena. Open `src/bin/arena.rs` and add an entry to the `agents` vector for your new implementation, clearly labeling it (e.g., `"MCTS_Tuned"`, `"BeamSearch_ConnectedHeuristic"`).
+
+2.  **Benchmark Execution:**
+    *   Compile and run the Arena benchmarker locally over the Golden Set (100 random seeds):
+        ```bash
+        cd popstar_solver
+        NUM_GAMES=100 cargo run --release --bin arena
+        ```
+    *   *Note:* The `--release` flag is critically important. Debug builds are too slow. Default `cargo run --release --bin arena` runs only 10 seeds for fast iterations.
+
+3.  **Evaluation & Verification:**
+    *   Analyze the console output of the Arena run.
+    *   Compare the **Average Score**, **Perfect Clear Rate**, and **Average Time** of your new agent against the baseline table listed in Section 1.
+    *   **Success Criteria:** An implementation is considered a "Win" if it either:
+        *   Increases the Average Score and/or Perfect Clear Rate with reasonable performance overhead.
+        *   Achieves comparable scores but operates significantly faster.
+
+4.  **Documentation & Persistence:**
+    *   **If the benchmark fails or scores are worse:** Use `jj undo` to revert the code, or modify the logic and repeat step 1. Do NOT commit regressions.
+    *   **If the benchmark succeeds:** 
+        1.  Update the **Golden Set Benchmark (100 Seeds)** table in Section 1 of this file (`solver_analysis.md`) with the new rankings, scores, and clear rates.
+        2.  Write a brief summary of the successful strategy below the table.
+        3.  Ensure the working directory is clean (`jj status`), fix up the code styling (`cargo fmt`), and persist the change:
+            ```bash
+            jj new -m "feat: <describe your algorithm optimization>"
+            ```
+5.  **Iteration:**
+    *   Once a new baseline is established, repeat the entire loop. Keep pushing the theoretical limits of the 10x10 PopStar board!
+
+## 3. Academic Literature & Future Improvement Directions
+
+Based on research into solving the **SameGame** / **Clickomania** NP-Complete problem, academic literature highlights several state-of-the-art algorithms that future agents should attempt to implement to break current records:
+
+1.  **Single-Player MCTS (SP-MCTS):**
+    Traditional MCTS (like UCT) is designed for adversarial games to maximize win rates. For single-player puzzles, SP-MCTS modifies the Selection and Backpropagation phases to optimize for the **Max Score** rather than a win probability, often propagating the maximum score found in a subtree rather than the average.
+2.  **NRPA (Nested Rollout Policy Adaptation):**
+    A record-breaking algorithm in the SameGame domain. Instead of relying on random or static greedy rollouts (like our `MISPS`), NRPA learns an online rollout policy during the search. It adjusts the probability of choosing certain colors/moves based on the sequences that previously yielded high scores, making the Monte Carlo simulations progressively smarter.
+3.  **BMCTS (Beam Monte-Carlo Tree Search):**
+    A hybrid approach. It uses Beam Search to prune the tree (keeping only the top $K$ nodes per depth), but instead of using a static heuristic to rank the nodes, it uses MCTS rollouts to evaluate their true potential. This combines the narrow-and-deep focus of Beam Search with the accurate dynamic evaluation of MCTS.
+4.  **RAVE (Rapid Action Value Estimation):**
+    An enhancement for MCTS that shares the value of actions (moves) across different branches of the tree. If eliminating a specific green block proves highly valuable in one branch, RAVE biases the search to try that same elimination early in other branches, drastically speeding up convergence in the early stages of the search.

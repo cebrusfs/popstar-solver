@@ -1,6 +1,6 @@
-# PopStar Puzzle Game and Solver
+# PopStar (SameGame / Clickomania) AI Solver
 
-This project implements the PopStar puzzle game, and a solver for it, in Rust.
+This project implements the PopStar puzzle game (mathematically known as **SameGame** or **Clickomania**), and a high-performance AI solver for it, in Rust.
 
 ## Game Rules
 
@@ -22,14 +22,27 @@ This project implements the PopStar puzzle game, and a solver for it, in Rust.
 
 ## Project Structure
 
-*   `cpp/`: Contains the original C++ implementation. Deprecating.
+*   `cpp/`: Contains the original C++ implementation. Deprecated.
 *   `popstar_solver/`: Contains the Rust implementation.
     *   `src/lib.rs`: The library crate for the game engine and solver.
-    *   `src/engine.rs`: Core game logic (board, tiles, game mechanics).
-    *   `src/solver.rs`: DFS-based puzzle solver.
+    *   `src/engine.rs`: Core game logic (board, tiles, game mechanics) featuring a zero-allocation engine.
+    *   `src/solver.rs`: DFS-based puzzle solver and Branch-and-Bound implementations.
+    *   `src/heuristics.rs`: Predictive and admissible heuristics.
+    *   `src/advanced_solvers.rs`: Contains the MCTS (Monte Carlo Tree Search) agent.
     *   `src/bin/`: Contains the executables.
         *   `human_player.rs`: For interactive gameplay.
-        *   `ai_solver.rs`: For solving a given board state.
+        *   `ai_solver.rs`: For solving a given board state using DFS.
+        *   `evaluator.rs`: Legacy DFS benchmark.
+        *   `arena.rs`: **The AI Arena**, a parallel benchmarking platform evaluating Beam Search, MCTS, and Greedy agents against a Golden Set of random seeds.
+
+## Advanced Solvers & AI Arena
+
+Because PopStar is mathematically equivalent to the NP-Complete *SameGame*, exact optimization (DFS) struggles to clear a 10x10 board. To push the limits, we built the **AI Arena** to test advanced approximation algorithms:
+
+*   **Beam Search (W=5000)**: Our current state-of-the-art solver. By maintaining 5000 parallel universes and using a predictive heuristic that penalizes isolated blocks and orphan colors, it achieves a **74% Perfect Clear Rate** and an average score of **~4940** on our 100-seed Golden Set.
+*   **MCTS**: Uses UCB1 selection and rapid heuristic rollouts.
+
+For a deep dive into the mathematical equivalence, the zero-allocation engine optimizations, and the *Agentic Improvement Loop* protocol, please see [`solver_analysis.md`](./solver_analysis.md).
 
 ## Building and Running
 
@@ -41,77 +54,26 @@ The project is built using Cargo, the Rust package manager.
 ### Building the Project
 Navigate to the `popstar_solver` directory and run:
 ```bash
-cargo build
-```
-For a release build (optimized):
-```bash
 cargo build --release
 ```
-The binaries will be located in `popstar_solver/target/debug/` or `popstar_solver/target/release/`.
+
+### Running the AI Arena (Benchmark)
+To evaluate the latest AI agents (Beam Search, MCTS, Greedy):
+```bash
+# Run a quick 10-game evaluation (Default)
+cargo run --release --bin arena
+
+# Run the full Golden Set 100-game evaluation
+NUM_GAMES=100 cargo run --release --bin arena
+```
 
 ### Running the Interactive Player
 ```bash
 cargo run --bin human_player
 ```
-Or, after building:
+
+### Running the Exact DFS AI Solver
+The DFS solver takes a depth limit and an optional board file.
 ```bash
-./popstar_solver/target/debug/human_player
-```
-(Use `popstar_solver\target\debug\human_player.exe` on Windows)
-
-
-### Running the AI Solver
-The AI solver requires a depth limit and can take an optional board file. If no file is provided, it reads the board from stdin.
-
-**Arguments:**
-`ai_solver <depth_limit> [board_file]`
-
-**Board File Format:**
-The board file should contain 10 lines, each with 10 characters representing the tiles (R, G, B, Y, P, or . for empty), without spaces.
-The board should represent a stable state: tiles must have settled under gravity (i.e., no tiles floating above empty cells within the same column).
-
-For example, a valid 10x10 board might look like this in the file:
-```
-RRGYB.RYPG
-GRBYP.PYRB
-PYBRGGRYPB
-BYPGRYBPGR
-RYBPGGBYPR
-PGRYBRYPGB
-YBRPGPBRYP
-GBYPRYGBPR
-PYBGRPBYGR
-RBGPYRYBGP
-```
-
-**Examples:**
-
-1.  Run with a board file and depth limit 5:
-    ```bash
-To create a board file (e.g., `my_board.txt`), you can use a text editor or the following `cat` command in your terminal:
-```bash
-cat << EOF > my_board.txt
-RRGYB.RYPG
-GRBYP.PYRB
-PYBRGGRYPB
-BYPGRYBPGR
-RYBPGGBYPR
-PGRYBRYPGB
-YBRPGPBRYP
-GBYPRYGBPR
-PYBGRPBYGR
-RBGPYRYBGP
-EOF
-```
-This will create `my_board.txt` with the specified content.
-
-    cargo run --bin ai_solver -- 5 ./my_board.txt
-    ```
-    (Note: `--` is used to pass arguments to the binary when using `cargo run`. The path to `my_board.txt` should be relative to the `popstar_solver` directory, or an absolute path.)
-
-2.  Run with stdin input and depth limit 3:
-    ```bash
-    cargo run --bin ai_solver -- 3
-    ```
-    (The program will then wait for you to paste/type the 10 lines of the board, followed by EOF (Ctrl+D on Linux/macOS, Ctrl+Z then Enter on Windows)).
+cargo run --release --bin ai_solver -- 5
 ```

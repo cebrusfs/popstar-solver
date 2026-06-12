@@ -180,7 +180,10 @@ impl Agent for ArenaMctsAgent {
 fn main() {
     println!("=== PopStar AI Arena ===");
 
-    let total_games = 100;
+    let total_games = std::env::var("NUM_GAMES")
+        .unwrap_or_else(|_| "10".to_string())
+        .parse::<usize>()
+        .unwrap_or(10);
     let seeds: Vec<u64> = (1..=total_games).map(|x| x as u64).collect();
 
     let greedy_agent = GreedyAgent;
