@@ -45,11 +45,16 @@ pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
             let tile = grid[r][c];
             if tile != Tile::Empty {
                 let mut isolated = true;
-                if r > 0 && grid[r - 1][c] == tile { isolated = false; }
-                else if r + 1 < crate::engine::BOARD_SIZE && grid[r + 1][c] == tile { isolated = false; }
-                else if c > 0 && grid[r][c - 1] == tile { isolated = false; }
-                else if c + 1 < crate::engine::BOARD_SIZE && grid[r][c + 1] == tile { isolated = false; }
-                
+                if r > 0 && grid[r - 1][c] == tile {
+                    isolated = false;
+                } else if r + 1 < crate::engine::BOARD_SIZE && grid[r + 1][c] == tile {
+                    isolated = false;
+                } else if c > 0 && grid[r][c - 1] == tile {
+                    isolated = false;
+                } else if c + 1 < crate::engine::BOARD_SIZE && grid[r][c + 1] == tile {
+                    isolated = false;
+                }
+
                 if isolated {
                     isolated_count += 1;
                 }
@@ -292,11 +297,7 @@ pub fn choose_move_misps_clear_tiebreak(current_board: &Board) -> Option<(f64, (
     }
 
     // 2. Find max_misps_value
-    let max_misps_value = misps_scored_groups
-        .iter()
-        .map(|(_, val)| *val)
-        .max()
-        .unwrap_or(i32::MIN);
+    let max_misps_value = misps_scored_groups.iter().map(|(_, val)| *val).max().unwrap_or(i32::MIN);
 
     // 3. Modify candidate selection using threshold
     const THRESHOLD_RATIO: f64 = 0.90;
@@ -631,11 +632,7 @@ pub fn choose_move_connectivity_focus(current_board: &Board) -> Option<(f64, (us
         let current_max_next_group_size = if groups_on_sim_board.is_empty() {
             0
         } else {
-            groups_on_sim_board
-                .iter()
-                .map(|g| g.len())
-                .max()
-                .unwrap_or(0)
+            groups_on_sim_board.iter().map(|g| g.len()).max().unwrap_or(0)
         };
 
         let current_g1_original_size = group_g1_candidate.len();
@@ -686,12 +683,14 @@ pub fn evaluate_with_heuristic(game_state: Game) -> u32 {
     while let Some((_heuristic_value, chosen_group_coord)) = choose_move_misps(&simulated_board) {
         let (r_click, c_click) = chosen_group_coord;
         let gained = simulated_board.eliminate_group_by_click(r_click, c_click);
-        if gained == 0 { break; }
+        if gained == 0 {
+            break;
+        }
         simulated_score += gained;
         simulated_board.apply_gravity();
         simulated_board.shift_columns();
     }
-    
+
     simulated_score + simulated_board.calculate_bonus()
 }
 
@@ -741,6 +740,54 @@ pub fn calculate_admissible_heuristic(board: &Board) -> u32 {
     heuristic_score
 }
 
+/// Calculates a predictive heuristic for a given board state, optimized for Beam Search.
+///
+/// Unlike the admissible heuristic which is an optimistic upper bound, this heuristic
+/// attempts to give a more realistic evaluation of the board's potential by penalizing
+/// isolated tiles and orphan colors.
+///
+/// # Arguments
+/// * `board`: A reference to the `Board` to evaluate.
+///
+/// # Returns
+/// An `i32` representing the predictive heuristic score.
+pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
+    let mut color_counts = std::collections::HashMap::new();
+
+    for r in 0..BOARD_SIZE {
+        for c in 0..BOARD_SIZE {
+            let tile = board.get_tile(r, c);
+            if tile != Tile::Empty {
+                *color_counts.entry(tile).or_insert(0i32) += 1;
+            }
+        }
+    }
+
+    let mut score = 0;
+    let mut has_orphan = false;
+    let mut remaining_tiles = 0;
+
+    for &count in color_counts.values() {
+        if count == 1 {
+            has_orphan = true;
+        }
+        score += count * count * 5;
+        remaining_tiles += count;
+    }
+
+    if remaining_tiles == 0 {
+        score += 2000;
+    } else if !has_orphan {
+        // Optimistic chance of clearing the board
+        score += 1000;
+    }
+
+    let isolated = count_truly_isolated_tiles(board) as i32;
+    score -= isolated * 40;
+
+    score
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -752,11 +799,7 @@ mod tests {
     fn test_admissible_heuristic_calculation() {
         let empty_board_arr: [&str; 0] = [];
         let board_empty = board_from_str_array(&empty_board_arr).unwrap();
-        assert_eq!(
-            calculate_admissible_heuristic(&board_empty),
-            2000,
-            "Empty board heuristic"
-        );
+        assert_eq!(calculate_admissible_heuristic(&board_empty), 2000, "Empty board heuristic");
 
         let board_mixed_no_groups = board_from_str_array(&["RB", "YG"]).unwrap();
         assert_eq!(

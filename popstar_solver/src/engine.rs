@@ -375,7 +375,24 @@ impl Board {
         clicks
     }
 
-    pub(crate) fn eliminate_group_by_click(&mut self, r: usize, c: usize) -> u32 {
+    pub fn is_game_over(&self) -> bool {
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                let tile = self.grid[r][c];
+                if tile != Tile::Empty {
+                    if r + 1 < BOARD_SIZE && self.grid[r + 1][c] == tile {
+                        return false;
+                    }
+                    if c + 1 < BOARD_SIZE && self.grid[r][c + 1] == tile {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    pub fn eliminate_group_by_click(&mut self, r: usize, c: usize) -> u32 {
         let tile_kind = self.grid[r][c];
         if tile_kind == Tile::Empty {
             return 0;
@@ -728,8 +745,7 @@ impl Game {
         self.board.shift_columns();
         self.steps += 1;
 
-        self.history
-            .push((self.board.clone(), self.current_score, self.steps));
+        self.history.push((self.board.clone(), self.current_score, self.steps));
 
         true
     }
@@ -771,16 +787,7 @@ impl Game {
     /// # Returns
     /// `true` if no more moves can be made (game is over), `false` otherwise.
     pub fn is_game_over(&self) -> bool {
-        for r in 0..crate::engine::BOARD_SIZE {
-            for c in 0..crate::engine::BOARD_SIZE {
-                let tile = self.board.get_grid()[r][c];
-                if tile != Tile::Empty {
-                    if r + 1 < crate::engine::BOARD_SIZE && self.board.get_grid()[r + 1][c] == tile { return false; }
-                    if c + 1 < crate::engine::BOARD_SIZE && self.board.get_grid()[r][c + 1] == tile { return false; }
-                }
-            }
-        }
-        true
+        self.board.is_game_over()
     }
 
     /// Calculates the final score of the game.
@@ -908,16 +915,10 @@ mod tests {
             has_non_empty_b1,
             "Random board (default seed) was all Red or Empty, which is unlikely or an error."
         );
-        assert!(
-            different_from_empty_b2,
-            "Random board (seed 12345) was all Red or Empty."
-        );
+        assert!(different_from_empty_b2, "Random board (seed 12345) was all Red or Empty.");
 
         let board_clone = Board::new_random();
-        assert_eq!(
-            board.grid, board_clone.grid,
-            "new_random() should be deterministic"
-        );
+        assert_eq!(board.grid, board_clone.grid, "new_random() should be deterministic");
     }
 
     #[test]
@@ -925,16 +926,10 @@ mod tests {
         let seed = 123;
         let board1 = Board::new_random_with_seed(seed);
         let board2 = Board::new_random_with_seed(seed);
-        assert_eq!(
-            board1.grid, board2.grid,
-            "Boards with the same seed must be identical."
-        );
+        assert_eq!(board1.grid, board2.grid, "Boards with the same seed must be identical.");
 
         let board3 = Board::new_random_with_seed(seed + 1);
-        assert_ne!(
-            board1.grid, board3.grid,
-            "Boards with different seeds should differ."
-        );
+        assert_ne!(board1.grid, board3.grid, "Boards with different seeds should differ.");
     }
 
     #[test]
@@ -1100,11 +1095,7 @@ mod tests {
             vec![(4, 3), (4, 4)],
         ];
 
-        assert_eq!(
-            all_groups_found.len(),
-            5,
-            "Mismatch in number of groups found"
-        );
+        assert_eq!(all_groups_found.len(), 5, "Mismatch in number of groups found");
         for (i, expected_group) in expected_groups_data.iter().enumerate() {
             assert_eq!(&all_groups_found[i], expected_group, "Group {} mismatch", i);
         }
@@ -1323,11 +1314,8 @@ mod tests {
                 }
             }
         }
-        let expected_b1 = if count1 == 0 {
-            2000
-        } else {
-            std::cmp::max(0, 2000 - (count1 * count1 * 20))
-        };
+        let expected_b1 =
+            if count1 == 0 { 2000 } else { std::cmp::max(0, 2000 - (count1 * count1 * 20)) };
         assert_eq!(
             board1.calculate_bonus(),
             expected_b1,
@@ -1348,11 +1336,8 @@ mod tests {
                 }
             }
         }
-        let expected_b2 = if count2 == 0 {
-            2000
-        } else {
-            std::cmp::max(0, 2000 - (count2 * count2 * 20))
-        };
+        let expected_b2 =
+            if count2 == 0 { 2000 } else { std::cmp::max(0, 2000 - (count2 * count2 * 20)) };
         assert_eq!(
             board2.calculate_bonus(),
             expected_b2,
@@ -1365,12 +1350,8 @@ mod tests {
             rows10[0] = "RRRRRRRRRR";
         }
         let board10 = board_from_str_array(&rows10).unwrap();
-        let count10 = board10
-            .get_grid()
-            .iter()
-            .flatten()
-            .filter(|&&t| t != Tile::Empty)
-            .count() as u32;
+        let count10 =
+            board10.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b10 = if count10 == 0 {
             2000i32
         } else {
@@ -1391,12 +1372,8 @@ mod tests {
             rows11[0] = "RRRRRRRRRR";
         }
         let board11 = board_from_str_array(&rows11).unwrap();
-        let count11 = board11
-            .get_grid()
-            .iter()
-            .flatten()
-            .filter(|&&t| t != Tile::Empty)
-            .count() as u32;
+        let count11 =
+            board11.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b11 = if count11 == 0 {
             2000i32
         } else {
@@ -1417,12 +1394,8 @@ mod tests {
             rows15[0] = "RRRRRRRRRR";
         }
         let board15 = board_from_str_array(&rows15).unwrap();
-        let count15 = board15
-            .get_grid()
-            .iter()
-            .flatten()
-            .filter(|&&t| t != Tile::Empty)
-            .count() as u32;
+        let count15 =
+            board15.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b15 = if count15 == 0 {
             2000i32
         } else {
@@ -1478,12 +1451,8 @@ mod tests {
             game.final_score(),
             50 + board_11_tiles.calculate_bonus(),
             "Final score with clamped bonus incorrect ({} tiles)",
-            board_11_tiles
-                .get_grid()
-                .iter()
-                .flatten()
-                .filter(|&&t| t != Tile::Empty)
-                .count() as u32
+            board_11_tiles.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count()
+                as u32
         );
     }
 
@@ -1539,36 +1508,22 @@ mod tests {
         assert!(move_processed, "Valid move was not processed");
         assert_eq!(game.score(), 2 * 2 * 5, "Score after one move incorrect");
         assert_eq!(game.steps(), 1, "Steps after one move incorrect");
-        assert_eq!(
-            game.history.len(),
-            2,
-            "History length after one move incorrect"
-        );
-        let expected_tile_at_bottom_left = if BOARD_SIZE > 0 {
-            game.board.get_tile(BOARD_SIZE - 1, 0)
-        } else {
-            Tile::Empty
-        };
+        assert_eq!(game.history.len(), 2, "History length after one move incorrect");
+        let expected_tile_at_bottom_left =
+            if BOARD_SIZE > 0 { game.board.get_tile(BOARD_SIZE - 1, 0) } else { Tile::Empty };
         assert_eq!(
             expected_tile_at_bottom_left,
             Tile::Green,
             "Green tile did not fall to bottom-left as expected"
         );
-        assert_eq!(
-            game.board.get_tile(0, 0),
-            Tile::Empty,
-            "Original (0,0) was not cleared"
-        );
+        assert_eq!(game.board.get_tile(0, 0), Tile::Empty, "Original (0,0) was not cleared");
     }
 
     #[test]
     fn test_game_process_move_invalid_coords() {
         let mut game = Game::new_with_board(Board::default());
         let move_processed = game.process_move(BOARD_SIZE, BOARD_SIZE);
-        assert!(
-            !move_processed,
-            "Move with invalid coords should not be processed"
-        );
+        assert!(!move_processed, "Move with invalid coords should not be processed");
         assert_eq!(game.score(), 0);
         assert_eq!(game.steps(), 0);
         assert_eq!(game.history.len(), 1);
@@ -1584,10 +1539,7 @@ mod tests {
         let mut game = Game::new_with_board(board);
 
         let move_processed = game.process_move(0, 0);
-        assert!(
-            !move_processed,
-            "Move on a single tile (no group) should not be processed"
-        );
+        assert!(!move_processed, "Move on a single tile (no group) should not be processed");
         assert_eq!(game.score(), 0);
         assert_eq!(game.steps(), 0);
         assert_eq!(game.history.len(), 1);
@@ -1614,11 +1566,7 @@ mod tests {
             initial_board.get_grid(),
             "Board state after undo is not initial state"
         );
-        assert_eq!(
-            game.history.len(),
-            1,
-            "History length after undo is incorrect"
-        );
+        assert_eq!(game.history.len(), 1, "History length after undo is incorrect");
 
         let undo_again_successful = game.undo_last_move();
         assert!(!undo_again_successful, "Undo on initial state should fail");
@@ -1654,10 +1602,7 @@ mod tests {
             .find_all_groups()
             .into_iter()
             .find(|g| game.board().get_tile(g[0].0, g[0].1) == Tile::Green);
-        assert!(
-            green_group_after_move1.is_some(),
-            "Green group not found after first move"
-        );
+        assert!(green_group_after_move1.is_some(), "Green group not found after first move");
         let (gr, gc) = green_group_after_move1.unwrap()[0];
 
         game.process_move(gr, gc);
@@ -1690,10 +1635,7 @@ mod tests {
         }
         let board_single_tile = board_from_str_array(&board_single_tile_rows).unwrap();
         game = Game::new_with_board(board_single_tile.clone());
-        assert!(
-            game.is_game_over(),
-            "Board with only single tiles should be game over"
-        );
+        assert!(game.is_game_over(), "Board with only single tiles should be game over");
 
         let mut board_with_group_rows = vec!["........."; BOARD_SIZE];
         if BOARD_SIZE > 0 {
@@ -1701,16 +1643,10 @@ mod tests {
         }
         let board_with_group = board_from_str_array(&board_with_group_rows).unwrap();
         game = Game::new_with_board(board_with_group.clone());
-        assert!(
-            !game.is_game_over(),
-            "Board with a valid group should not be game over"
-        );
+        assert!(!game.is_game_over(), "Board with a valid group should not be game over");
 
         game.process_move(0, 0);
-        assert!(
-            game.is_game_over(),
-            "Board should be game over after eliminating the only group"
-        );
+        assert!(game.is_game_over(), "Board should be game over after eliminating the only group");
     }
 
     #[test]
@@ -1730,18 +1666,9 @@ mod tests {
         let steps_after_move = game.steps();
         let board_grid_after_move = game.board().get_grid().clone();
 
-        assert_ne!(
-            initial_score, score_after_move,
-            "Score should change after a move"
-        );
-        assert_ne!(
-            initial_steps, steps_after_move,
-            "Steps should change after a move"
-        );
-        assert_ne!(
-            initial_board_grid, board_grid_after_move,
-            "Board should change after a move"
-        );
+        assert_ne!(initial_score, score_after_move, "Score should change after a move");
+        assert_ne!(initial_steps, steps_after_move, "Steps should change after a move");
+        assert_ne!(initial_board_grid, board_grid_after_move, "Board should change after a move");
         assert_eq!(
             game.history.len(),
             history_len_before_move + 1,
@@ -1753,11 +1680,7 @@ mod tests {
 
         assert_eq!(game.score(), initial_score, "Score not restored after undo");
         assert_eq!(game.steps(), initial_steps, "Steps not restored after undo");
-        assert_eq!(
-            game.board().get_grid(),
-            &initial_board_grid,
-            "Board not restored after undo"
-        );
+        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board not restored after undo");
         assert_eq!(
             game.history.len(),
             history_len_before_move,
@@ -1781,48 +1704,25 @@ mod tests {
         let history_len_s1 = game.history.len();
         assert_ne!(score_s0, score_s1, "Score should change after move 1");
 
-        let (g_r, g_c) = if BOARD_SIZE >= 2 {
-            (game.board().get_grid().len() - 1, 0)
-        } else {
-            (1, 0)
-        };
+        let (g_r, g_c) =
+            if BOARD_SIZE >= 2 { (game.board().get_grid().len() - 1, 0) } else { (1, 0) };
         let move2_processed = game.process_move(g_r, g_c);
-        assert!(
-            move2_processed,
-            "Move 2 (Green) failed. Board:\n{}",
-            game.board()
-        );
+        assert!(move2_processed, "Move 2 (Green) failed. Board:\n{}", game.board());
 
         let _history_len_s2 = game.history.len();
         assert_ne!(score_s1, game.score(), "Score should change after move 2");
 
         assert!(game.undo_last_move(), "Undo of Move 2 failed");
-        assert_eq!(
-            game.board().get_grid(),
-            board_s1.get_grid(),
-            "Board not S1 after undoing M2"
-        );
+        assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undoing M2");
         assert_eq!(game.score(), score_s1, "Score not S1 after undoing M2");
         assert_eq!(game.steps(), steps_s1, "Steps not S1 after undoing M2");
-        assert_eq!(
-            game.history.len(),
-            history_len_s1,
-            "History len not S1 after undoing M2"
-        );
+        assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undoing M2");
 
         assert!(game.undo_last_move(), "Undo of Move 1 failed");
-        assert_eq!(
-            game.board().get_grid(),
-            board_s0.get_grid(),
-            "Board not S0 after undoing M1"
-        );
+        assert_eq!(game.board().get_grid(), board_s0.get_grid(), "Board not S0 after undoing M1");
         assert_eq!(game.score(), score_s0, "Score not S0 after undoing M1");
         assert_eq!(game.steps(), steps_s0, "Steps not S0 after undoing M1");
-        assert_eq!(
-            game.history.len(),
-            history_len_s0,
-            "History len not S0 after undoing M1"
-        );
+        assert_eq!(game.history.len(), history_len_s0, "History len not S0 after undoing M1");
     }
 
     #[test]
@@ -1837,17 +1737,11 @@ mod tests {
             let (move_b_r, move_b_c) = (game.board().get_grid().len() - 1, 0);
             assert!(game.process_move(move_b_r, move_b_c), "Move B (GGG) failed");
             let (move_c_r, move_c_c) = (game.board().get_grid().len() - 1, 0);
-            assert!(
-                game.process_move(move_c_r, move_c_c),
-                "Move C (BBBB) failed"
-            );
+            assert!(game.process_move(move_c_r, move_c_c), "Move C (BBBB) failed");
         } else if BOARD_SIZE == 2 {
             assert!(game.process_move(0, 0), "Move A (RR) failed on small board");
             let (move_b_r, move_b_c) = (game.board().get_grid().len() - 1, 0);
-            assert!(
-                game.process_move(move_b_r, move_b_c),
-                "Move B (BBBB) failed on small board"
-            );
+            assert!(game.process_move(move_b_r, move_b_c), "Move B (BBBB) failed on small board");
         } else if BOARD_SIZE == 1 {
             assert!(game.process_move(0, 0), "Move A (RR) failed on tiny board");
         }
@@ -1859,10 +1753,7 @@ mod tests {
 
         let mut undo_count = 0;
         while game.history.len() > 1 {
-            assert!(
-                game.undo_last_move(),
-                "Undo should succeed while history > 1"
-            );
+            assert!(game.undo_last_move(), "Undo should succeed while history > 1");
             undo_count += 1;
         }
 
@@ -1878,16 +1769,9 @@ mod tests {
         );
         assert_eq!(game.score(), initial_score, "Score not restored to initial");
         assert_eq!(game.steps(), initial_steps, "Steps not restored to initial");
-        assert_eq!(
-            game.history.len(),
-            1,
-            "History should contain only the initial state"
-        );
+        assert_eq!(game.history.len(), 1, "History should contain only the initial state");
 
-        assert!(
-            !game.undo_last_move(),
-            "Undo should fail when only initial state is left"
-        );
+        assert!(!game.undo_last_move(), "Undo should fail when only initial state is left");
     }
 
     #[test]
@@ -1901,26 +1785,11 @@ mod tests {
         let initial_history_len = game.history.len();
 
         let undo_result = game.undo_last_move();
-        assert!(
-            !undo_result,
-            "undo_last_move should return false on a new game"
-        );
+        assert!(!undo_result, "undo_last_move should return false on a new game");
 
-        assert_eq!(
-            game.score(),
-            initial_score,
-            "Score changed after failed undo"
-        );
-        assert_eq!(
-            game.steps(),
-            initial_steps,
-            "Steps changed after failed undo"
-        );
-        assert_eq!(
-            game.board().get_grid(),
-            &initial_board_grid,
-            "Board changed after failed undo"
-        );
+        assert_eq!(game.score(), initial_score, "Score changed after failed undo");
+        assert_eq!(game.steps(), initial_steps, "Steps changed after failed undo");
+        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board changed after failed undo");
         assert_eq!(
             game.history.len(),
             initial_history_len,
@@ -1939,11 +1808,8 @@ mod tests {
         let steps_s1 = game.steps();
         let history_len_s1 = game.history.len();
 
-        let (g_r, g_c) = if BOARD_SIZE >= 2 {
-            (game.board().get_grid().len() - 1, 0)
-        } else {
-            (1, 0)
-        };
+        let (g_r, g_c) =
+            if BOARD_SIZE >= 2 { (game.board().get_grid().len() - 1, 0) } else { (1, 0) };
         let m2_processed = game.process_move(g_r, g_c);
         if BOARD_SIZE >= 2 {
             assert!(m2_processed, "Move M2 failed. Board:\n{}", game.board());
@@ -1956,18 +1822,10 @@ mod tests {
             let _history_len_s2 = game.history.len();
 
             assert!(game.undo_last_move(), "Undo of M2 failed");
-            assert_eq!(
-                game.board().get_grid(),
-                board_s1.get_grid(),
-                "Board not S1 after undo"
-            );
+            assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undo");
             assert_eq!(game.score(), score_s1, "Score not S1 after undo");
             assert_eq!(game.steps(), steps_s1, "Steps not S1 after undo");
-            assert_eq!(
-                game.history.len(),
-                history_len_s1,
-                "History len not S1 after undo"
-            );
+            assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undo");
 
             let m2_again_processed = game.process_move(g_r, g_c);
             assert!(
@@ -1983,11 +1841,7 @@ mod tests {
             );
             assert_eq!(game.score(), score_s2, "Score not S2 after M2 (again)");
             assert_eq!(game.steps(), steps_s2, "Steps not S2 after M2 (again)");
-            assert_eq!(
-                game.history.len(),
-                _history_len_s2,
-                "History len not S2 after M2 (again)"
-            );
+            assert_eq!(game.history.len(), _history_len_s2, "History len not S2 after M2 (again)");
 
             assert!(game.undo_last_move(), "Undo M2 (again) failed");
 
@@ -2015,10 +1869,7 @@ mod tests {
                 );
             }
         } else if BOARD_SIZE >= 2 {
-            panic!(
-                "Move M2 was unexpectedly not processed on a board of size {}",
-                BOARD_SIZE
-            );
+            panic!("Move M2 was unexpectedly not processed on a board of size {}", BOARD_SIZE);
         }
     }
 }
