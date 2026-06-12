@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::engine::{Board, Game};
 use crate::heuristics::choose_move_misps;
 use rand::rngs::SmallRng;
@@ -362,5 +363,199 @@ impl SpMctsAgent {
         let best_node = &tree[best_child];
         let move_made = best_node.move_made.unwrap();
         Some((move_made.0, move_made.1, best_node.board.clone()))
+    }
+}
+
+// I will patch the relevant parts later.
+
+pub struct NrpaAgent {
+    pub level: usize,
+    pub iterations: usize,
+    pub alpha: f64,
+}
+
+impl NrpaAgent {
+    pub fn new(level: usize, iterations: usize, alpha: f64) -> Self {
+        Self { level, iterations, alpha }
+    }
+
+    pub fn play(&self, initial_board: &Board) -> (i32, Vec<(usize, usize)>) {
+        let mut policy = [0.0; 500];
+        let mut rng = SmallRng::from_entropy();
+        self.nrpa(self.level, initial_board, &mut policy, &mut rng)
+    }
+
+    fn nrpa(
+        &self,
+        level: usize,
+        state: &Board,
+        policy: &mut [f64; 500],
+        rng: &mut SmallRng,
+    ) -> (i32, Vec<(usize, usize)>) {
+        if level == 0 {
+            return self.playout(state, policy, rng);
+        }
+
+        let mut best_score = -1;
+        let mut best_seq = Vec::new();
+
+        for _ in 0..self.iterations {
+            let mut next_policy = *policy;
+            let (score, seq) = self.nrpa(level - 1, state, &mut next_policy, rng);
+            if score >= best_score {
+                best_score = score;
+                best_seq = seq.clone();
+            }
+            self.adapt(policy, &best_seq, state);
+        }
+
+        (best_score, best_seq)
+    }
+
+    fn playout(
+        &self,
+        state: &Board,
+        policy: &[f64; 500],
+        rng: &mut SmallRng,
+    ) -> (i32, Vec<(usize, usize)>) {
+        let mut current_state = state.clone();
+        let mut seq = Vec::new();
+        let mut total_score = 0;
+
+        loop {
+            let moves = current_state.find_all_group_clicks_with_len();
+            if moves.is_empty() {
+                break;
+            }
+
+            let mut sum_exp = 0.0;
+            let mut weights = Vec::with_capacity(moves.len());
+
+            let mut max_w = f64::NEG_INFINITY;
+            for &((r, c), len) in &moves {
+                let color_idx = match current_state.get_tile(r, c) {
+                    crate::engine::Tile::Red => 0,
+                    crate::engine::Tile::Green => 1,
+                    crate::engine::Tile::Blue => 2,
+                    crate::engine::Tile::Yellow => 3,
+                    crate::engine::Tile::Purple => 4,
+                    _ => 0,
+                };
+                let w = policy[color_idx * 100 + len.min(99)];
+                if w > max_w { max_w = w; }
+            }
+            
+            for &((r, c), len) in &moves {
+                let color_idx = match current_state.get_tile(r, c) {
+                    crate::engine::Tile::Red => 0,
+                    crate::engine::Tile::Green => 1,
+                    crate::engine::Tile::Blue => 2,
+                    crate::engine::Tile::Yellow => 3,
+                    crate::engine::Tile::Purple => 4,
+                    _ => 0,
+                };
+                let w = policy[color_idx * 100 + len.min(99)];
+                let e = (w - max_w).exp();
+                sum_exp += e;
+                weights.push((r, c, e));
+            }
+
+            let mut r_val = rng.gen::<f64>() * sum_exp;
+            let mut chosen = weights.last().unwrap();
+            for w in &weights {
+                r_val -= w.2;
+                if r_val <= 0.0 {
+                    chosen = w;
+                    break;
+                }
+            }
+
+            let (r, c) = (chosen.0, chosen.1);
+            seq.push((r, c));
+
+            let len = moves.iter().find(|m| m.0 == (r, c)).unwrap().1;
+            total_score += (len * len * 5) as i32;
+
+            current_state.eliminate_group_by_click(r, c);
+            current_state.apply_gravity();
+            current_state.shift_columns();
+        }
+
+        let final_bonus = Game::new_with_board(current_state).final_score() as i32;
+        total_score += final_bonus;
+
+        (total_score, seq)
+    }
+
+    fn adapt(
+        &self,
+        policy: &mut [f64; 500],
+        best_seq: &[(usize, usize)],
+        state: &Board,
+    ) {
+        let mut current_state = state.clone();
+        for &(r, c) in best_seq {
+            let moves = current_state.find_all_group_clicks_with_len();
+
+            let mut sum_exp = 0.0;
+            let mut exps = Vec::with_capacity(moves.len());
+
+            let mut max_w = f64::NEG_INFINITY;
+            for &((mr, mc), len) in &moves {
+                let color_idx = match current_state.get_tile(mr, mc) {
+                    crate::engine::Tile::Red => 0,
+                    crate::engine::Tile::Green => 1,
+                    crate::engine::Tile::Blue => 2,
+                    crate::engine::Tile::Yellow => 3,
+                    crate::engine::Tile::Purple => 4,
+                    _ => 0,
+                };
+                let w = policy[color_idx * 100 + len.min(99)];
+                if w > max_w { max_w = w; }
+            }
+            
+            for &((mr, mc), len) in &moves {
+                let color_idx = match current_state.get_tile(mr, mc) {
+                    crate::engine::Tile::Red => 0,
+                    crate::engine::Tile::Green => 1,
+                    crate::engine::Tile::Blue => 2,
+                    crate::engine::Tile::Yellow => 3,
+                    crate::engine::Tile::Purple => 4,
+                    _ => 0,
+                };
+                let w = policy[color_idx * 100 + len.min(99)];
+                let e = (w - max_w).exp();
+                sum_exp += e;
+                exps.push(((mr, mc, len), e));
+            }
+
+            let best_len = moves.iter().find(|m| m.0 == (r, c)).unwrap().1;
+            let best_color_idx = match current_state.get_tile(r, c) {
+                crate::engine::Tile::Red => 0,
+                crate::engine::Tile::Green => 1,
+                crate::engine::Tile::Blue => 2,
+                crate::engine::Tile::Yellow => 3,
+                crate::engine::Tile::Purple => 4,
+                _ => 0,
+            };
+            policy[best_color_idx * 100 + best_len.min(99)] += self.alpha;
+
+            for ((mr, mc, mlen), e) in exps {
+                let prob = e / sum_exp;
+                let color_idx = match current_state.get_tile(mr, mc) {
+                    crate::engine::Tile::Red => 0,
+                    crate::engine::Tile::Green => 1,
+                    crate::engine::Tile::Blue => 2,
+                    crate::engine::Tile::Yellow => 3,
+                    crate::engine::Tile::Purple => 4,
+                    _ => 0,
+                };
+                policy[color_idx * 100 + mlen.min(99)] -= self.alpha * prob;
+            }
+
+            current_state.eliminate_group_by_click(r, c);
+            current_state.apply_gravity();
+            current_state.shift_columns();
+        }
     }
 }

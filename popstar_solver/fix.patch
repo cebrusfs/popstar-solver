@@ -1,0 +1,14 @@
+--- src/bin/arena.rs
++++ src/bin/arena.rs
+@@ -228,8 +228,8 @@
+     let nrpa_l2_100 = ArenaNrpaAgent { level: 2, iterations: 100, alpha: 1.0 };
+     let nrpa_l3_10 = ArenaNrpaAgent { level: 3, iterations: 10, alpha: 1.0 };
+-    let agents: Vec<&dyn Agent> =
+-        let nrpa_l3_100 = ArenaNrpaAgent { level: 3, iterations: 100, alpha: 1.0 };
+-    let nrpa_l4_10 = ArenaNrpaAgent { level: 4, iterations: 10, alpha: 1.0 };
+-    vec![&beam_agent_500, &nrpa_l3_10, &nrpa_l4_10, &nrpa_l3_100];
++    let nrpa_l3_100 = ArenaNrpaAgent { level: 3, iterations: 100, alpha: 1.0 };
++    let nrpa_l4_10 = ArenaNrpaAgent { level: 4, iterations: 10, alpha: 1.0 };
++    let agents: Vec<&dyn Agent> = vec![&beam_agent_500, &nrpa_l3_10, &nrpa_l4_10, &nrpa_l3_100];
+ 
+     let agent_names: Vec<&str> = agents.iter().map(|a| a.name()).collect();
