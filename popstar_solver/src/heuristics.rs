@@ -39,7 +39,7 @@ pub fn count_unique_colors(board: &Board) -> usize {
 /// The total count of truly isolated tiles as `u32`.
 pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
     let mut isolated_count = 0;
-    let grid = board.get_grid();
+    let grid = board.to_grid();
     for r in 0..crate::engine::BOARD_SIZE {
         for c in 0..crate::engine::BOARD_SIZE {
             let tile = grid[r][c];

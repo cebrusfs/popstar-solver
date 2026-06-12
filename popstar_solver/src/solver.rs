@@ -234,7 +234,7 @@ mod tests {
     fn test_count_truly_isolated_tiles_all_isolated() {
         let board = crate::utils::board_from_str_array(&["RGYB", "PYG.", "RBPY"]).unwrap();
         let expected_isolated = board
-            .get_grid()
+            .to_grid()
             .iter()
             .flatten()
             .filter(|&&t| t != Tile::Empty)

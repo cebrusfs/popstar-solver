@@ -87,129 +87,70 @@ impl Tile {
 /// The board is always square. For example, a `BOARD_SIZE` of 10 means a 10x10 grid.
 pub const BOARD_SIZE: usize = 10;
 
-/// Represents the game board as a 2D grid of `Tile`s.
-///
-/// The board stores the state of each cell (tile type) and provides
-/// methods for game mechanics like finding groups, eliminating tiles,
-/// applying gravity, and shifting columns.
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct Board {
-    grid: [[Tile; BOARD_SIZE]; BOARD_SIZE],
+    columns: [u32; BOARD_SIZE],
 }
 
 impl Board {
-    /// Creates a new game board with randomly assigned, non-empty colors for each tile.
-    ///
-    /// This method uses a fixed internal seed (`514514`) for the random number generator
-    /// to ensure that calls to `new_random()` are deterministic and produce the same
-    /// board if called multiple times. This is useful for consistent testing or specific game scenarios.
-    /// All tiles will be one of the five colors; no `Tile::Empty` will be generated here.
-    ///
-    /// # Returns
-    /// A `Board` instance filled with randomly chosen `Tile` colors.
     pub fn new_random() -> Self {
         let seed = 514514;
         Self::new_random_with_seed(seed)
     }
 
-    /// Creates a new game board with randomly assigned, non-empty colors using a provided seed.
-    ///
-    /// This allows for reproducible random boards. Different seeds will produce
-    /// different board configurations, but the same seed will always produce the same board.
-    /// All tiles will be one of the five colors; no `Tile::Empty` will be generated here.
-    ///
-    /// # Arguments
-    /// * `seed`: A `u64` value used to seed the random number generator.
-    ///
-    /// # Returns
-    /// A `Board` instance filled with randomly chosen `Tile` colors based on the given seed.
     pub fn new_random_with_seed(seed: u64) -> Self {
-        let mut rng = SmallRng::seed_from_u64(seed); // Use SmallRng for deterministic generation
-
-        let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
-        #[allow(clippy::needless_range_loop)] // Indexed loop is clear for 2D array init
+        let mut rng = SmallRng::seed_from_u64(seed);
+        let mut board = Board::default();
         for r in 0..BOARD_SIZE {
             for c in 0..BOARD_SIZE {
-                grid[r][c] = Tile::new_random(&mut rng); // Use new helper
+                board.set_tile(r, c, Tile::new_random(&mut rng));
             }
         }
-        Board { grid }
+        board
     }
 
-    /// Creates a new board from a predefined grid configuration.
-    ///
-    /// This is useful for testing or setting up specific game scenarios.
-    ///
-    /// # Arguments
-    /// * `initial_grid`: A 2D array of `Tile`s representing the desired board state.
-    ///   The dimensions must match `BOARD_SIZE`.
-    ///
-    /// # Returns
-    /// A `Board` instance initialized with the provided `initial_grid`.
     pub fn from_grid(initial_grid: [[Tile; BOARD_SIZE]; BOARD_SIZE]) -> Self {
-        Board { grid: initial_grid }
+        let mut board = Board::default();
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                board.set_tile(r, c, initial_grid[r][c]);
+            }
+        }
+        board
     }
 
-    /// Returns the tile at the specified row (`r`) and column (`c`).
-    ///
-    /// # Arguments
-    /// * `r`: The row index (0-based).
-    /// * `c`: The column index (0-based).
-    ///
-    /// # Panics
-    /// Panics if `r` or `c` are outside the board dimensions (`0 <= r < BOARD_SIZE`, `0 <= c < BOARD_SIZE`).
+    pub fn to_grid(&self) -> [[Tile; BOARD_SIZE]; BOARD_SIZE] {
+        let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
+        for r in 0..BOARD_SIZE {
+            for c in 0..BOARD_SIZE {
+                grid[r][c] = self.get_tile(r, c);
+            }
+        }
+        grid
+    }
+
+    #[inline(always)]
     pub fn get_tile(&self, r: usize, c: usize) -> Tile {
-        self.grid[r][c]
+        let shift = (BOARD_SIZE - 1 - r) * 3;
+        let val = (self.columns[c] >> shift) & 0b111;
+        match val {
+            0 => Tile::Empty,
+            1 => Tile::Red,
+            2 => Tile::Green,
+            3 => Tile::Blue,
+            4 => Tile::Yellow,
+            5 => Tile::Purple,
+            _ => Tile::Empty,
+        }
     }
 
-    /// Sets the tile at the specified row (`r`) and column (`c`) to the given `tile` type.
-    ///
-    /// # Arguments
-    /// * `r`: The row index (0-based).
-    /// * `c`: The column index (0-based).
-    /// * `tile`: The `Tile` to place at the specified coordinates.
-    ///
-    /// # Panics
-    /// Panics if `r` or `c` are outside the board dimensions.
+    #[inline(always)]
     pub fn set_tile(&mut self, r: usize, c: usize, tile: Tile) {
-        self.grid[r][c] = tile;
+        let shift = (BOARD_SIZE - 1 - r) * 3;
+        self.columns[c] &= !(0b111 << shift);
+        self.columns[c] |= (tile as u32) << shift;
     }
 
-    /// Returns a mutable reference to the underlying 2D grid of tiles.
-    ///
-    /// This allows direct manipulation of the board's grid, which should be used with caution
-    /// as it can lead to inconsistent board states if not handled properly (e.g., by not
-    /// applying gravity or shifting columns afterwards when tiles are cleared).
-    ///
-    /// # Returns
-    /// A mutable reference to the `[[Tile; BOARD_SIZE]; BOARD_SIZE]` grid.
-    pub fn get_grid_mut(&mut self) -> &mut [[Tile; BOARD_SIZE]; BOARD_SIZE] {
-        &mut self.grid
-    }
-
-    /// Returns an immutable reference to the underlying 2D grid of tiles.
-    ///
-    /// This is useful for reading the board state directly without modification.
-    ///
-    /// # Returns
-    /// An immutable reference to the `[[Tile; BOARD_SIZE]; BOARD_SIZE]` grid.
-    pub fn get_grid(&self) -> &[[Tile; BOARD_SIZE]; BOARD_SIZE] {
-        &self.grid
-    }
-
-    /// Generates a string representation of the board with an optional highlighted position.
-    ///
-    /// The output includes row and column numbers and uses ANSI escape codes for tile colors
-    /// in a terminal environment. If `pos` is `Some((r, c))`, the tile at that position
-    /// will be highlighted (e.g., by showing `..` instead of empty space for colored tiles).
-    ///
-    /// # Arguments
-    /// * `pos`: An `Option<(usize, usize)>` specifying the (row, column) of the tile to highlight.
-    ///   If `None`, no tile is highlighted.
-    ///
-    /// # Returns
-    /// A `String` containing the formatted board representation suitable for terminal output.
-    // NOTE: Naming reviewed: current name is clear.
     pub fn to_string_with_highlight(&self, pos: Option<(usize, usize)>) -> String {
         let mut output = String::new();
 
@@ -224,7 +165,7 @@ impl Board {
 
             for c_idx in 0..BOARD_SIZE {
                 let is_highlight = pos.map_or(false, |p| p.0 == r_idx && p.1 == c_idx);
-                let color_code = self.grid[r_idx][c_idx].to_ansi_color_code();
+                let color_code = self.get_tile(r_idx, c_idx).to_ansi_color_code();
                 let content = if is_highlight { ".." } else { "  " };
                 output.push_str(&format!("\x1b[1;{};m{}\x1b[m", color_code, content));
             }
@@ -236,50 +177,29 @@ impl Board {
         output
     }
 
-    /// Finds a connected group of same-colored tiles starting from the given coordinates (`r`, `c`).
-    ///
-    /// A group must consist of at least two tiles of the same color. Tiles are considered
-    /// connected if they are adjacent horizontally or vertically (not diagonally).
-    /// This method uses a Breadth-First Search (BFS) algorithm.
-    ///
-    /// # Arguments
-    /// * `r`: The row index (0-based) of the starting tile.
-    /// * `c`: The column index (0-based) of the starting tile.
-    ///
-    /// # Returns
-    /// A `Vec<(usize, usize)>` containing the coordinates of all tiles in the found group.
-    /// The coordinates within the returned vector are sorted (row-major, then column-major).
-    /// Returns an empty vector if the starting tile is `Tile::Empty`, if the coordinates are
-    /// out of bounds (though `get_tile` would panic first), or if no group of 2 or more
-    /// same-colored tiles is found.
-    ///
-    /// # Panics
-    /// Panics if `r` or `c` are out of the board's bounds, due to `get_tile`.
     pub fn find_group(&self, r: usize, c: usize) -> Vec<(usize, usize)> {
         let tile_kind = self.get_tile(r, c);
         if tile_kind == Tile::Empty {
-            return Vec::new(); // Cannot form a group from an empty tile
+            return Vec::new();
         }
 
         let mut group = Vec::new();
-        let mut q = VecDeque::new(); // Queue for BFS
-        let mut visited = [[false; BOARD_SIZE]; BOARD_SIZE]; // Tracks visited cells for this specific BFS
+        let mut q = VecDeque::new();
+        let mut visited = [0u32; BOARD_SIZE];
 
         q.push_back((r, c));
-        visited[r][c] = true;
+        visited[c] |= 1 << r;
 
-        let dr = [-1, 1, 0, 0]; // Delta for row (up, down)
-        let dc = [0, 0, -1, 1]; // Delta for column (left, right)
+        let dr = [-1, 1, 0, 0];
+        let dc = [0, 0, -1, 1];
 
         while let Some((curr_r, curr_c)) = q.pop_front() {
             group.push((curr_r, curr_c));
 
-            // Explore neighbors
             for i in 0..4 {
                 let nr_signed = curr_r as isize + dr[i];
                 let nc_signed = curr_c as isize + dc[i];
 
-                // Check bounds for neighbor
                 if nr_signed >= 0
                     && nr_signed < BOARD_SIZE as isize
                     && nc_signed >= 0
@@ -287,41 +207,25 @@ impl Board {
                 {
                     let nr = nr_signed as usize;
                     let nc = nc_signed as usize;
-                    // If neighbor is same color and not visited, add to queue
-                    if !visited[nr][nc] && self.get_tile(nr, nc) == tile_kind {
-                        visited[nr][nc] = true;
+                    if (visited[nc] & (1 << nr)) == 0 && self.get_tile(nr, nc) == tile_kind {
+                        visited[nc] |= 1 << nr;
                         q.push_back((nr, nc));
                     }
                 }
             }
         }
 
-        // A valid group must have at least 2 tiles
         if group.len() >= 2 {
-            group.sort_unstable(); // Ensure consistent order for easier testing and comparison
+            group.sort_unstable();
             group
         } else {
-            Vec::new() // Not a valid group
+            Vec::new()
         }
     }
 
-    /// Finds all distinct groups of connected, same-colored tiles on the board.
-    ///
-    /// Each group returned will contain at least two tiles. The groups themselves are sorted
-    /// by their first tile's coordinates (row-major, then column-major), and tiles within
-    /// each group are also sorted by their coordinates. This ensures a canonical representation
-    /// of groups on the board.
-    ///
-    /// This method iterates through each cell of the board. If a cell contains a non-empty tile
-    /// and has not yet been visited as part of another group, `find_group` is called from that cell.
-    ///
-    /// # Returns
-    /// A `Vec<Vec<(usize, usize)>>` where each inner vector represents a group of tile coordinates.
-    /// Returns an empty vector if no groups of 2 or more tiles are found on the board.
-
     pub fn find_all_group_clicks_with_len(&self) -> Vec<((usize, usize), usize)> {
         let mut clicks = Vec::with_capacity(50);
-        let mut visited = [[false; crate::engine::BOARD_SIZE]; crate::engine::BOARD_SIZE];
+        let mut visited = [0u32; crate::engine::BOARD_SIZE];
         let mut q = [(0usize, 0usize); 100];
 
         let dr = [-1, 1, 0, 0];
@@ -329,14 +233,14 @@ impl Board {
 
         for r_idx in 0..crate::engine::BOARD_SIZE {
             for c_idx in 0..crate::engine::BOARD_SIZE {
-                let tile_kind = self.grid[r_idx][c_idx];
-                if tile_kind != Tile::Empty && !visited[r_idx][c_idx] {
+                let tile_kind = self.get_tile(r_idx, c_idx);
+                if tile_kind != Tile::Empty && (visited[c_idx] & (1 << r_idx)) == 0 {
                     let mut q_head = 0;
                     let mut q_tail = 0;
 
                     q[q_tail] = (r_idx, c_idx);
                     q_tail += 1;
-                    visited[r_idx][c_idx] = true;
+                    visited[c_idx] |= 1 << r_idx;
 
                     while q_head < q_tail {
                         let (curr_r, curr_c) = q[q_head];
@@ -354,8 +258,8 @@ impl Board {
                                 let nr = nr_signed as usize;
                                 let nc = nc_signed as usize;
 
-                                if !visited[nr][nc] && self.grid[nr][nc] == tile_kind {
-                                    visited[nr][nc] = true;
+                                if (visited[nc] & (1 << nr)) == 0 && self.get_tile(nr, nc) == tile_kind {
+                                    visited[nc] |= 1 << nr;
                                     q[q_tail] = (nr, nc);
                                     q_tail += 1;
                                 }
@@ -376,24 +280,37 @@ impl Board {
     }
 
     pub fn is_game_over(&self) -> bool {
-        for r in 0..BOARD_SIZE {
-            for c in 0..BOARD_SIZE {
-                let tile = self.grid[r][c];
-                if tile != Tile::Empty {
-                    if r + 1 < BOARD_SIZE && self.grid[r + 1][c] == tile {
-                        return false;
-                    }
-                    if c + 1 < BOARD_SIZE && self.grid[r][c + 1] == tile {
-                        return false;
-                    }
+        // Vertical checks
+        for c in 0..BOARD_SIZE {
+            let mut col = self.columns[c];
+            if col != 0 {
+                let mut prev = col & 0b111;
+                col >>= 3;
+                for _ in 1..BOARD_SIZE {
+                    let curr = col & 0b111;
+                    if curr != 0 && curr == prev { return false; }
+                    prev = curr;
+                    col >>= 3;
                 }
+            }
+        }
+        // Horizontal checks
+        for c in 0..BOARD_SIZE - 1 {
+            let mut col1 = self.columns[c];
+            let mut col2 = self.columns[c + 1];
+            for _ in 0..BOARD_SIZE {
+                let t1 = col1 & 0b111;
+                let t2 = col2 & 0b111;
+                if t1 != 0 && t1 == t2 { return false; }
+                col1 >>= 3;
+                col2 >>= 3;
             }
         }
         true
     }
 
     pub fn eliminate_group_by_click(&mut self, r: usize, c: usize) -> u32 {
-        let tile_kind = self.grid[r][c];
+        let tile_kind = self.get_tile(r, c);
         if tile_kind == Tile::Empty {
             return 0;
         }
@@ -404,7 +321,7 @@ impl Board {
 
         q[q_tail] = (r, c);
         q_tail += 1;
-        self.grid[r][c] = Tile::Empty;
+        self.set_tile(r, c, Tile::Empty);
 
         let dr = [-1, 1, 0, 0];
         let dc = [0, 0, -1, 1];
@@ -425,8 +342,8 @@ impl Board {
                     let nr = nr_signed as usize;
                     let nc = nc_signed as usize;
 
-                    if self.grid[nr][nc] == tile_kind {
-                        self.grid[nr][nc] = Tile::Empty;
+                    if self.get_tile(nr, nc) == tile_kind {
+                        self.set_tile(nr, nc, Tile::Empty);
                         q[q_tail] = (nr, nc);
                         q_tail += 1;
                     }
@@ -438,144 +355,86 @@ impl Board {
             let n = q_tail as u32;
             n * n * 5
         } else {
-            self.grid[r][c] = tile_kind;
+            self.set_tile(r, c, tile_kind);
             0
         }
     }
 
     pub fn find_all_groups(&self) -> Vec<Vec<(usize, usize)>> {
         let mut all_groups = Vec::new();
-        let mut visited_for_all_groups = [[false; BOARD_SIZE]; BOARD_SIZE]; // Tracks tiles already part of a found group
+        let mut visited = [0u32; BOARD_SIZE];
 
         for r_idx in 0..BOARD_SIZE {
             for c_idx in 0..BOARD_SIZE {
-                // If tile is not empty and not yet part of any group found so far
-                if self.get_tile(r_idx, c_idx) != Tile::Empty
-                    && !visited_for_all_groups[r_idx][c_idx]
-                {
+                if self.get_tile(r_idx, c_idx) != Tile::Empty && (visited[c_idx] & (1 << r_idx)) == 0 {
                     let group = self.find_group(r_idx, c_idx);
-
                     if !group.is_empty() {
-                        // find_group ensures group.len() >= 2
-                        // Mark all tiles in this newly found group as visited
                         for &(gr, gc) in &group {
-                            visited_for_all_groups[gr][gc] = true;
+                            visited[gc] |= 1 << gr;
                         }
                         all_groups.push(group);
                     } else {
-                        // If find_group returns empty (e.g., it was a singleton tile),
-                        // mark just this starting tile as visited in the context of find_all_groups
-                        // to avoid redundant `find_group` calls on it.
-                        visited_for_all_groups[r_idx][c_idx] = true;
+                        visited[c_idx] |= 1 << r_idx;
                     }
                 }
             }
         }
-        // Sort groups by their first tile's coordinates for consistent output
-        all_groups.sort_unstable_by_key(|g| g[0]); // g[0] is (row, col) which sorts row-major
+        all_groups.sort_unstable_by_key(|g| g[0]);
         all_groups
     }
 
-    /// Eliminates a specified group of tiles from the board by setting them to `Tile::Empty`.
-    ///
-    /// Calculates the score obtained from eliminating this group. The score is `n * n * 5`,
-    /// where `n` is the number of tiles in the group.
-    ///
-    /// # Arguments
-    /// * `group`: A slice of `(usize, usize)` coordinates representing the tiles to be eliminated.
-    ///   It's assumed that these tiles form a valid group.
-    ///
-    /// # Returns
-    /// The score (`u32`) obtained from eliminating the group. Returns 0 if the group is empty.
-    ///
-    /// # Panics
-    /// Panics if any coordinate in `group` is out of bounds, due to `set_tile`.
     pub(crate) fn eliminate_group(&mut self, group: &[(usize, usize)]) -> u32 {
         if group.is_empty() {
             return 0;
         }
         for &(r, c) in group {
-            // Bounds check is implicitly handled by set_tile, but good to be aware.
-            // If r,c were out of bounds, set_tile would panic.
             self.set_tile(r, c, Tile::Empty);
         }
         let n = group.len() as u32;
-        n * n * 5 // Score calculation: n^2 * 5
+        n * n * 5
     }
 
-    /// Applies gravity to the board column by column.
-    ///
-    /// After tiles are eliminated, any tiles above the resulting empty spaces will fall
-    /// down to fill these spaces within their respective columns.
-    /// This method iterates through each column, moving tiles downwards to occupy
-    /// the lowest available empty slots.
     pub fn apply_gravity(&mut self) {
         for c in 0..BOARD_SIZE {
-            // Iterate through each column
-            let mut empty_slot = BOARD_SIZE - 1; // Start searching for empty slots from the bottom of the column
-                                                 // Iterate upwards from the bottom of the current column
-            for r_check in (0..BOARD_SIZE).rev() {
-                if self.grid[r_check][c] != Tile::Empty {
-                    // If we find a non-empty tile
-                    // If this tile is not already in the lowest available empty_slot for it
-                    if r_check != empty_slot {
-                        self.grid[empty_slot][c] = self.grid[r_check][c]; // Move tile to the empty_slot
-                        self.grid[r_check][c] = Tile::Empty; // Vacate its original position
-                    }
-                    // Successfully placed a tile or found it already in place,
-                    // move the empty_slot pointer up.
-                    empty_slot = empty_slot.saturating_sub(1);
+            let col = self.columns[c];
+            if col == 0 { continue; }
+            let mut new_col = 0;
+            let mut shift = 0;
+            let mut tmp = col;
+            for _ in 0..BOARD_SIZE {
+                let tile = tmp & 0b111;
+                if tile != 0 {
+                    new_col |= tile << shift;
+                    shift += 3;
                 }
+                tmp >>= 3;
             }
+            self.columns[c] = new_col;
         }
     }
 
-    /// Shifts columns to the left if any column becomes entirely empty.
-    ///
-    /// If a column is completely devoid of tiles (all `Tile::Empty`) after eliminations
-    /// and gravity, all columns to its right are shifted one position to the left
-    /// to fill the gap. This process is repeated if multiple empty columns are created.
     pub fn shift_columns(&mut self) {
-        let mut write_col = 0; // Tracks the column index where the next non-empty column should be written
+        let mut write_col = 0;
         for read_col in 0..BOARD_SIZE {
-            // Iterate through all columns from left to right
-            // Check if the current read_col is entirely empty by checking all its rows.
-            let is_read_column_empty =
-                (0..BOARD_SIZE).all(|r| self.grid[r][read_col] == Tile::Empty);
-
-            if !is_read_column_empty {
-                // If the read_col contains any tiles
+            if self.columns[read_col] != 0 {
                 if read_col != write_col {
-                    // And it's not already in its correct (shifted) position
-                    // Move the entire column from read_col to write_col
-                    for r_idx in 0..BOARD_SIZE {
-                        self.grid[r_idx][write_col] = self.grid[r_idx][read_col];
-                        self.grid[r_idx][read_col] = Tile::Empty; // Clear the original column cells
-                    }
+                    self.columns[write_col] = self.columns[read_col];
                 }
-                write_col += 1; // Increment write_col, as it's now filled
+                write_col += 1;
             }
-            // If is_column_empty is true, write_col is not incremented, so the empty
-            // column is effectively skipped and will be overwritten by subsequent non-empty columns.
+        }
+        for c in write_col..BOARD_SIZE {
+            self.columns[c] = 0;
         }
     }
 
-    /// Calculates the end-of-game bonus based on the number of tiles remaining on the board.
-    ///
-    /// The bonus is awarded according to the formula: `max(0, 2000 - (remaining_tiles_count^2 * 20))`.
-    /// A board cleared of all tiles (0 remaining tiles) yields the maximum bonus of 2000 points.
-    /// If 10 or more tiles remain, the penalty `(remaining_tiles_count^2 * 20)` will be
-    /// 2000 or more, resulting in a bonus of 0.
-    ///
-    /// # Returns
-    /// The calculated bonus score as a `u32`.
     pub fn to_packed(&self) -> [u64; 5] {
         let mut packed = [0u64; 5];
         let mut word_idx = 0;
         let mut bit_offset = 0;
         for r in 0..BOARD_SIZE {
             for c in 0..BOARD_SIZE {
-                let val = match self.grid[r][c] {
+                let val = match self.get_tile(r, c) {
                     Tile::Empty => 0,
                     Tile::Red => 1,
                     Tile::Green => 2,
@@ -596,24 +455,25 @@ impl Board {
 
     pub fn calculate_bonus(&self) -> u32 {
         let mut remaining_count = 0;
-        for r in 0..BOARD_SIZE {
-            for c in 0..BOARD_SIZE {
-                if self.grid[r][c] != Tile::Empty {
+        for c in 0..BOARD_SIZE {
+            let mut col = self.columns[c];
+            for _ in 0..BOARD_SIZE {
+                if (col & 0b111) != 0 {
                     remaining_count += 1;
                 }
+                col >>= 3;
             }
         }
-        let bonus = 2000 - std::cmp::min(2000, remaining_count * remaining_count * 20);
-        bonus
+        2000 - std::cmp::min(2000, remaining_count * remaining_count * 20)
     }
 }
 
 impl fmt::Display for Board {
-    /// Formats the board for display using `to_string_with_highlight(None)`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_with_highlight(None))
     }
 }
+
 
 /// Manages the state and progression of a PopStar game session.
 ///
@@ -875,7 +735,7 @@ mod tests {
                 }
             }
         }
-        Board { grid }
+        Board::from_grid(grid)
     }
 
     #[test]
@@ -918,7 +778,7 @@ mod tests {
         assert!(different_from_empty_b2, "Random board (seed 12345) was all Red or Empty.");
 
         let board_clone = Board::new_random();
-        assert_eq!(board.grid, board_clone.grid, "new_random() should be deterministic");
+        assert_eq!(board, board_clone, "new_random() should be deterministic");
     }
 
     #[test]
@@ -926,10 +786,10 @@ mod tests {
         let seed = 123;
         let board1 = Board::new_random_with_seed(seed);
         let board2 = Board::new_random_with_seed(seed);
-        assert_eq!(board1.grid, board2.grid, "Boards with the same seed must be identical.");
+        assert_eq!(board1, board2, "Boards with the same seed must be identical.");
 
         let board3 = Board::new_random_with_seed(seed + 1);
-        assert_ne!(board1.grid, board3.grid, "Boards with different seeds should differ.");
+        assert_ne!(board1, board3, "Boards with different seeds should differ.");
     }
 
     #[test]
@@ -1155,7 +1015,7 @@ mod tests {
             expected_rows_strings.iter().map(|s| s.as_str()).collect();
         let expected_board = board_from_str_array(&expected_rows_strs).unwrap();
 
-        assert_eq!(board.get_grid(), expected_board.get_grid());
+        assert_eq!(board.to_grid(), expected_board.to_grid());
     }
 
     #[test]
@@ -1163,7 +1023,7 @@ mod tests {
         let mut board = Board::default();
         let initial_state = board.clone();
         board.apply_gravity();
-        assert_eq!(board.get_grid(), initial_state.get_grid());
+        assert_eq!(board.to_grid(), initial_state.to_grid());
     }
 
     #[test]
@@ -1176,9 +1036,9 @@ mod tests {
             board_rows[BOARD_SIZE - 1] = "R........";
         }
         let mut board = board_from_str_array(&board_rows).unwrap();
-        let expected_grid = *board.get_grid();
+        let expected_grid = board.to_grid();
         board.apply_gravity();
-        assert_eq!(board.get_grid(), &expected_grid);
+        assert_eq!(board.to_grid(), expected_grid);
     }
 
     #[test]
@@ -1211,7 +1071,7 @@ mod tests {
         }
 
         let expected_board = board_from_str_array(&expected_rows).unwrap();
-        assert_eq!(board.get_grid(), expected_board.get_grid());
+        assert_eq!(board.to_grid(), expected_board.to_grid());
     }
 
     #[test]
@@ -1244,23 +1104,23 @@ mod tests {
             ".........",
         ])
         .unwrap();
-        assert_eq!(board.get_grid(), expected_board.get_grid());
+        assert_eq!(board.to_grid(), expected_board.to_grid());
     }
 
     #[test]
     fn test_shift_columns_no_empty_columns() {
         let mut board = Board::new_random_with_seed(123);
-        let initial_state_grid = *board.get_grid();
+        let initial_state_grid = board.to_grid();
         board.shift_columns();
-        assert_eq!(board.get_grid(), &initial_state_grid);
+        assert_eq!(board.to_grid(), initial_state_grid);
     }
 
     #[test]
     fn test_shift_columns_all_empty() {
         let mut board = Board::default();
-        let initial_state_grid = *board.get_grid();
+        let initial_state_grid = board.to_grid();
         board.shift_columns();
-        assert_eq!(board.get_grid(), &initial_state_grid);
+        assert_eq!(board.to_grid(), initial_state_grid);
     }
 
     #[test]
@@ -1293,7 +1153,7 @@ mod tests {
             ".........",
         ])
         .unwrap();
-        assert_eq!(board.get_grid(), expected_board.get_grid());
+        assert_eq!(board.to_grid(), expected_board.to_grid());
     }
 
     #[test]
@@ -1307,7 +1167,7 @@ mod tests {
         }
         let board1 = board_from_str_array(&rows1).unwrap();
         let mut count1 = 0;
-        for row in board1.get_grid().iter() {
+        for row in board1.to_grid().iter() {
             for &tile in row.iter() {
                 if tile != Tile::Empty {
                     count1 += 1;
@@ -1329,7 +1189,7 @@ mod tests {
         }
         let board2 = board_from_str_array(&rows2).unwrap();
         let mut count2 = 0;
-        for row in board2.get_grid().iter() {
+        for row in board2.to_grid().iter() {
             for &tile in row.iter() {
                 if tile != Tile::Empty {
                     count2 += 1;
@@ -1351,7 +1211,7 @@ mod tests {
         }
         let board10 = board_from_str_array(&rows10).unwrap();
         let count10 =
-            board10.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
+            board10.to_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b10 = if count10 == 0 {
             2000i32
         } else {
@@ -1373,7 +1233,7 @@ mod tests {
         }
         let board11 = board_from_str_array(&rows11).unwrap();
         let count11 =
-            board11.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
+            board11.to_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b11 = if count11 == 0 {
             2000i32
         } else {
@@ -1395,7 +1255,7 @@ mod tests {
         }
         let board15 = board_from_str_array(&rows15).unwrap();
         let count15 =
-            board15.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
+            board15.to_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count() as u32;
         let expected_b15 = if count15 == 0 {
             2000i32
         } else {
@@ -1451,7 +1311,7 @@ mod tests {
             game.final_score(),
             50 + board_11_tiles.calculate_bonus(),
             "Final score with clamped bonus incorrect ({} tiles)",
-            board_11_tiles.get_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count()
+            board_11_tiles.to_grid().iter().flatten().filter(|&&t| t != Tile::Empty).count()
                 as u32
         );
     }
@@ -1496,7 +1356,7 @@ mod tests {
         assert_eq!(game.score(), 0);
         assert_eq!(game.steps(), 0);
         assert_eq!(game.history.len(), 1);
-        assert_eq!(game.board().get_grid(), board.get_grid());
+        assert_eq!(game.board().to_grid(), board.to_grid());
     }
 
     #[test]
@@ -1562,8 +1422,8 @@ mod tests {
         assert_eq!(game.score(), 0, "Score after undo is not initial score");
         assert_eq!(game.steps(), 0, "Steps after undo is not initial steps");
         assert_eq!(
-            game.board().get_grid(),
-            initial_board.get_grid(),
+            game.board().to_grid(),
+            initial_board.to_grid(),
             "Board state after undo is not initial state"
         );
         assert_eq!(game.history.len(), 1, "History length after undo is incorrect");
@@ -1613,13 +1473,13 @@ mod tests {
         assert!(game.undo_last_move());
         assert_eq!(game.score(), score1);
         assert_eq!(game.steps(), steps1);
-        assert_eq!(game.board().get_grid(), board1_state.get_grid());
+        assert_eq!(game.board().to_grid(), board1_state.to_grid());
         assert_eq!(game.history.len(), 2);
 
         assert!(game.undo_last_move());
         assert_eq!(game.score(), 0);
         assert_eq!(game.steps(), 0);
-        assert_eq!(game.board().get_grid(), initial_board_state.get_grid());
+        assert_eq!(game.board().to_grid(), initial_board_state.to_grid());
         assert_eq!(game.history.len(), 1);
     }
 
@@ -1656,7 +1516,7 @@ mod tests {
 
         let initial_score = game.score();
         let initial_steps = game.steps();
-        let initial_board_grid = game.board().get_grid().clone();
+        let initial_board_grid = game.board().to_grid().clone();
         let history_len_before_move = game.history.len();
 
         let move_processed = game.process_move(0, 0);
@@ -1664,7 +1524,7 @@ mod tests {
 
         let score_after_move = game.score();
         let steps_after_move = game.steps();
-        let board_grid_after_move = game.board().get_grid().clone();
+        let board_grid_after_move = game.board().to_grid().clone();
 
         assert_ne!(initial_score, score_after_move, "Score should change after a move");
         assert_ne!(initial_steps, steps_after_move, "Steps should change after a move");
@@ -1680,7 +1540,7 @@ mod tests {
 
         assert_eq!(game.score(), initial_score, "Score not restored after undo");
         assert_eq!(game.steps(), initial_steps, "Steps not restored after undo");
-        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board not restored after undo");
+        assert_eq!(game.board().to_grid(), initial_board_grid, "Board not restored after undo");
         assert_eq!(
             game.history.len(),
             history_len_before_move,
@@ -1705,7 +1565,7 @@ mod tests {
         assert_ne!(score_s0, score_s1, "Score should change after move 1");
 
         let (g_r, g_c) =
-            if BOARD_SIZE >= 2 { (game.board().get_grid().len() - 1, 0) } else { (1, 0) };
+            if BOARD_SIZE >= 2 { (game.board().to_grid().len() - 1, 0) } else { (1, 0) };
         let move2_processed = game.process_move(g_r, g_c);
         assert!(move2_processed, "Move 2 (Green) failed. Board:\n{}", game.board());
 
@@ -1713,13 +1573,13 @@ mod tests {
         assert_ne!(score_s1, game.score(), "Score should change after move 2");
 
         assert!(game.undo_last_move(), "Undo of Move 2 failed");
-        assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undoing M2");
+        assert_eq!(game.board().to_grid(), board_s1.to_grid(), "Board not S1 after undoing M2");
         assert_eq!(game.score(), score_s1, "Score not S1 after undoing M2");
         assert_eq!(game.steps(), steps_s1, "Steps not S1 after undoing M2");
         assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undoing M2");
 
         assert!(game.undo_last_move(), "Undo of Move 1 failed");
-        assert_eq!(game.board().get_grid(), board_s0.get_grid(), "Board not S0 after undoing M1");
+        assert_eq!(game.board().to_grid(), board_s0.to_grid(), "Board not S0 after undoing M1");
         assert_eq!(game.score(), score_s0, "Score not S0 after undoing M1");
         assert_eq!(game.steps(), steps_s0, "Steps not S0 after undoing M1");
         assert_eq!(game.history.len(), history_len_s0, "History len not S0 after undoing M1");
@@ -1734,13 +1594,13 @@ mod tests {
 
         if BOARD_SIZE >= 3 {
             assert!(game.process_move(0, 0), "Move A (RR) failed");
-            let (move_b_r, move_b_c) = (game.board().get_grid().len() - 1, 0);
+            let (move_b_r, move_b_c) = (game.board().to_grid().len() - 1, 0);
             assert!(game.process_move(move_b_r, move_b_c), "Move B (GGG) failed");
-            let (move_c_r, move_c_c) = (game.board().get_grid().len() - 1, 0);
+            let (move_c_r, move_c_c) = (game.board().to_grid().len() - 1, 0);
             assert!(game.process_move(move_c_r, move_c_c), "Move C (BBBB) failed");
         } else if BOARD_SIZE == 2 {
             assert!(game.process_move(0, 0), "Move A (RR) failed on small board");
-            let (move_b_r, move_b_c) = (game.board().get_grid().len() - 1, 0);
+            let (move_b_r, move_b_c) = (game.board().to_grid().len() - 1, 0);
             assert!(game.process_move(move_b_r, move_b_c), "Move B (BBBB) failed on small board");
         } else if BOARD_SIZE == 1 {
             assert!(game.process_move(0, 0), "Move A (RR) failed on tiny board");
@@ -1763,8 +1623,8 @@ mod tests {
         );
 
         assert_eq!(
-            game.board().get_grid(),
-            initial_board.get_grid(),
+            game.board().to_grid(),
+            initial_board.to_grid(),
             "Board not restored to initial"
         );
         assert_eq!(game.score(), initial_score, "Score not restored to initial");
@@ -1781,7 +1641,7 @@ mod tests {
 
         let initial_score = game.score();
         let initial_steps = game.steps();
-        let initial_board_grid = game.board().get_grid().clone();
+        let initial_board_grid = game.board().to_grid().clone();
         let initial_history_len = game.history.len();
 
         let undo_result = game.undo_last_move();
@@ -1789,7 +1649,7 @@ mod tests {
 
         assert_eq!(game.score(), initial_score, "Score changed after failed undo");
         assert_eq!(game.steps(), initial_steps, "Steps changed after failed undo");
-        assert_eq!(game.board().get_grid(), &initial_board_grid, "Board changed after failed undo");
+        assert_eq!(game.board().to_grid(), initial_board_grid, "Board changed after failed undo");
         assert_eq!(
             game.history.len(),
             initial_history_len,
@@ -1809,7 +1669,7 @@ mod tests {
         let history_len_s1 = game.history.len();
 
         let (g_r, g_c) =
-            if BOARD_SIZE >= 2 { (game.board().get_grid().len() - 1, 0) } else { (1, 0) };
+            if BOARD_SIZE >= 2 { (game.board().to_grid().len() - 1, 0) } else { (1, 0) };
         let m2_processed = game.process_move(g_r, g_c);
         if BOARD_SIZE >= 2 {
             assert!(m2_processed, "Move M2 failed. Board:\n{}", game.board());
@@ -1822,7 +1682,7 @@ mod tests {
             let _history_len_s2 = game.history.len();
 
             assert!(game.undo_last_move(), "Undo of M2 failed");
-            assert_eq!(game.board().get_grid(), board_s1.get_grid(), "Board not S1 after undo");
+            assert_eq!(game.board().to_grid(), board_s1.to_grid(), "Board not S1 after undo");
             assert_eq!(game.score(), score_s1, "Score not S1 after undo");
             assert_eq!(game.steps(), steps_s1, "Steps not S1 after undo");
             assert_eq!(game.history.len(), history_len_s1, "History len not S1 after undo");
@@ -1835,8 +1695,8 @@ mod tests {
             );
 
             assert_eq!(
-                game.board().get_grid(),
-                board_s2.get_grid(),
+                game.board().to_grid(),
+                board_s2.to_grid(),
                 "Board not S2 after M2 (again)"
             );
             assert_eq!(game.score(), score_s2, "Score not S2 after M2 (again)");
@@ -1846,7 +1706,7 @@ mod tests {
             assert!(game.undo_last_move(), "Undo M2 (again) failed");
 
             if BOARD_SIZE >= 4 {
-                let (b_r, b_c) = (game.board().get_grid().len() - 2, 1);
+                let (b_r, b_c) = (game.board().to_grid().len() - 2, 1);
                 assert!(
                     game.process_move(b_r, b_c),
                     "Move M3 (Blue) failed. Board:\n{}",
@@ -1858,8 +1718,8 @@ mod tests {
                     "Score for M3 should be different from M2's score"
                 );
                 assert_ne!(
-                    game.board().get_grid(),
-                    board_s2.get_grid(),
+                    game.board().to_grid(),
+                    board_s2.to_grid(),
                     "Board for M3 should be different from S2"
                 );
                 assert_eq!(
