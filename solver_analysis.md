@@ -15,14 +15,13 @@ Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approx
 
 | Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | **5405.6** | **8340** | **92.0%** | **2.30s** |
-| 🥈 | **BeamSearch (W=5000) [Predictive V1: Orphan Penalty]** | 5161.4 | 8340 | 89.0% | 1.32s |
-| 🥉 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5031.2 | 8325 | 68.0% | 0.23s |
-| 4 | **BMCTS (W=100, N=20) [MISPS Rollout]** | 4577.1 | 6485 | 67.0% | 3.41s |
-| 5 | **SP-MCTS (250ms/move)** | 4535.6 | 6855 | 22.0% | 3.76s |
-| 6 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
-| 7 | **MCTS (100ms/move)** | 4233.0 | 5505 | 24.0% | 1.01s |
-| 8 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
+| 🥇 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | **5405.9** | **8340** | **92.0%** | **2.34s** |
+| 🥈 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5021.1 | 8325 | 67.0% | 0.24s |
+| 🥉 | **BMCTS (W=100, N=20) [Greedy Rollout]** | 4588.6 | 6485 | 66.0% | 3.43s |
+| 4 | **SP-MCTS (250ms/move)** | 4553.2 | 6455 | 27.0% | 3.67s |
+| 5 | **NRPA (Level=2, Iterations=100)** | 4397.7 | 7250 | 17.0% | 0.52s |
+| 6 | **MCTS (100ms/move)** | 4223.2 | 6015 | 24.0% | 1.02s |
+| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
 
 Beam Search (W=5000) with the explicit **-5000 Orphan Penalty** and **-100 Component Split Penalty** achieves a breathtaking **92% Clear Rate** and an average score of **5405.6**! By penalizing states where colors are fragmented into multiple disconnected components, the algorithm naturally preserves large continuous blocks, drastically increasing the perfect clear rate.
 
@@ -36,7 +35,8 @@ Your goal is to beat the current top average score and perfect clear rate on the
 ### Step-by-Step Execution Protocol
 
 1.  **Ideation & Implementation:**
-    *   Formulate a specific algorithmic hypothesis. Examples:
+    *   **Continuous Academic Review:** Before forming a hypothesis, crawl recent papers or online resources on solving "SameGame" or "Clickomania" (e.g., using a web search tool or academic databases). Look for state-of-the-art enhancements.
+    *   Formulate a specific algorithmic hypothesis based on literature or heuristics. Examples:
         *   **Heuristics Enhancement:** Improve the evaluation heuristic used in Beam Search to select the top $K$ branches. E.g., introduce connectivity-based evaluation or prioritize keeping colors grouped together instead of assuming the optimistic `calculate_admissible_heuristic`.
         *   **MCTS Rollout Strategy:** Replace the greedy `MISPS` rollout in MCTS with a more domain-aware rule (e.g., preserving vertical matches). Tune exploration constants (`UCT`), add Progressive Widening, or integrate RAVE.
         *   **Engine Optimization:** Profile and optimize memory/CPU hot-paths to enable more iterations/deeper searches per second.
@@ -83,8 +83,12 @@ Based on research into solving the **SameGame** / **Clickomania** NP-Complete pr
     Traditional MCTS (like UCT) is designed for adversarial games to maximize win rates. For single-player puzzles, SP-MCTS modifies the Selection and Backpropagation phases to optimize for the **Max Score** rather than a win probability, often propagating the maximum score found in a subtree rather than the average.
 2.  **NRPA (Nested Rollout Policy Adaptation):**
     A record-breaking algorithm in the SameGame domain. Instead of relying on random or static greedy rollouts (like our `MISPS`), NRPA learns an online rollout policy during the search. It adjusts the probability of choosing certain colors/moves based on the sequences that previously yielded high scores, making the Monte Carlo simulations progressively smarter.
+    *   **GNRPA (Generalized NRPA)**: Introduces a "Temperature" parameter to dynamically control the exploration vs. exploitation trade-off, preventing the policy from falling into local optima.
 3.  **BMCTS (Beam Monte-Carlo Tree Search):**
-    A hybrid approach. It uses Beam Search to prune the tree (keeping only the top $K$ nodes per depth), but instead of using a static heuristic to rank the nodes, it uses MCTS rollouts to evaluate their true potential. This combines the narrow-and-deep focus of Beam Search with the accurate dynamic evaluation of MCTS.
-4.  **RAVE (Rapid Action Value Estimation):**
+    A hybrid approach. It uses Beam Search to prune the tree (keeping only the top $K$ nodes per depth), but instead of using a static heuristic to rank the nodes, it uses MCTS rollouts to evaluate their true potential.
+    *   **High-Priority Enhancement**: Currently, our BMCTS uses a brainless greedy rollout. Injecting our `Predictive V2 (Component Split Penalty)` heuristic or a **Tabu Color** strategy (withholding clicks from the most abundant color) into the rollout phase is the most promising path to shattering current records.
+4.  **Nested Monte-Carlo Search (NMCS) & Macro-moves:**
+    Often simpler and more effective than SP-MCTS. It can be further augmented by generating "Macro-moves" via BFS—multi-step sequences that intentionally merge disjoint components of the same color, allowing the solver to bridge the valley of short-term penalties for massive long-term quadratic payoffs.
+5.  **RAVE (Rapid Action Value Estimation):**
     An enhancement for MCTS that shares the value of actions (moves) across different branches of the tree. If eliminating a specific green block proves highly valuable in one branch, RAVE biases the search to try that same elimination early in other branches, drastically speeding up convergence in the early stages of the search.
 
