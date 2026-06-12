@@ -88,12 +88,3 @@ Based on research into solving the **SameGame** / **Clickomania** NP-Complete pr
 4.  **RAVE (Rapid Action Value Estimation):**
     An enhancement for MCTS that shares the value of actions (moves) across different branches of the tree. If eliminating a specific green block proves highly valuable in one branch, RAVE biases the search to try that same elimination early in other branches, drastically speeding up convergence in the early stages of the search.
 
-## 4. Architectural Decoupling: The $N \times M$ Matrix
-
-Future agents must treat **Search Algorithms** and **Heuristics (Evaluation Functions)** as two strictly orthogonal (independent) dimensions. We want to be able to mix and match any Search Algorithm $N$ with any Heuristic $M$ (e.g., `BeamSearch + Predictive V2`, `MCTS + Predictive V1`).
-
-### Important Constraint for DFS (Branch & Bound):
-While approximate search algorithms (Beam Search, MCTS, Greedy) can use ANY heuristic (predictive, non-admissible, etc.), **Exact DFS MUST use an Admissible Heuristic**. 
-*   **Admissible** means the heuristic *never* underestimates the true cost to reach the goal (in our case, never underestimates the max possible score).
-*   If you feed a predictive heuristic (which uses negative penalties like the Orphan Penalty) into DFS, DFS will use those low bounds to incorrectly prune the optimal branch, destroying its guarantee to find the mathematically perfect solution.
-*   Therefore, any efforts to improve exact DFS must focus strictly on designing tighter *Admissible* upper bounds. Any efforts to improve practical solving for 10x10 boards should focus on $N \times M$ combinations of Approximate Algorithms with Predictive Heuristics.

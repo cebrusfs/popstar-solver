@@ -22,7 +22,6 @@ This project implements the PopStar puzzle game (mathematically known as **SameG
 
 ## Project Structure
 
-*   `cpp/`: Contains the original C++ implementation. Deprecated.
 *   `popstar_solver/`: Contains the Rust implementation.
     *   `src/lib.rs`: The library crate for the game engine and solver.
     *   `src/engine.rs`: Core game logic (board, tiles, game mechanics) featuring a zero-allocation engine.
@@ -35,14 +34,17 @@ This project implements the PopStar puzzle game (mathematically known as **SameG
         *   `evaluator.rs`: Legacy DFS benchmark.
         *   `arena.rs`: **The AI Arena**, a parallel benchmarking platform evaluating Beam Search, MCTS, and Greedy agents against a Golden Set of random seeds.
 
-## Advanced Solvers & AI Arena
+## Advanced Solvers & Orthogonal Architecture
 
-Because PopStar is mathematically equivalent to the NP-Complete *SameGame*, exact optimization (DFS) struggles to clear a 10x10 board. To push the limits, we built the **AI Arena** to test advanced approximation algorithms:
+Because PopStar is mathematically equivalent to the NP-Complete *SameGame*, exact optimization (DFS) struggles to clear a 10x10 board. To push the limits, we built the **AI Arena** to test advanced approximation algorithms.
 
-*   **Beam Search (W=5000)**: Our current state-of-the-art solver. By maintaining 5000 parallel universes and using a predictive heuristic that penalizes isolated blocks and orphan colors, it achieves a **74% Perfect Clear Rate** and an average score of **~4940** on our 100-seed Golden Set.
+We use an **$N \times M$ Orthogonal Architecture** to evaluate these agents. In `arena.rs`, we decoupled **Search Algorithms** (BeamSearch, DFS, MCTS) from **Heuristics** (Admissible, Predictive V1 Orphan Penalty, Predictive V2 Component Split Penalty) using generic function pointers. This allows us to rapidly experiment with combinations like `BeamSearch` + `Predictive V2` or `MCTS` + `Predictive V1`.
+
+*   **Beam Search (W=5000)**: Our current state-of-the-art solver. By maintaining 5000 parallel universes and using a predictive heuristic that penalizes isolated blocks and orphan colors, it achieves a **92% Perfect Clear Rate** and an average score of **~5405** on our 100-seed Golden Set.
 *   **MCTS**: Uses UCB1 selection and rapid heuristic rollouts.
 
-For a deep dive into the mathematical equivalence, the zero-allocation engine optimizations, and the *Agentic Improvement Loop* protocol, please see [`solver_analysis.md`](./solver_analysis.md).
+For a deep dive into the architecture, please see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+For the *Agentic Improvement Loop* protocol and detailed benchmarks, please see [`solver_analysis.md`](./solver_analysis.md).
 
 ## Building and Running
 
