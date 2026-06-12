@@ -781,9 +781,11 @@ pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
     let mut score = 0;
     let mut has_orphan = false;
     let mut remaining_tiles = 0;
+    let mut num_unique_colors = 0;
 
     for &count in &color_counts[1..=6] {
         if count == 0 { continue; }
+        num_unique_colors += 1;
         if count == 1 {
             has_orphan = true;
         }
@@ -803,6 +805,15 @@ pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
 
     let isolated = count_truly_isolated_tiles(board) as i32;
     score -= isolated * 200;
+
+    // Component splitting penalty
+    // Penalize when a color is fragmented into multiple disconnected components.
+    let num_groups_geq_2 = board.find_all_group_clicks_with_len().len() as i32;
+    let total_components = num_groups_geq_2 + isolated;
+    let splits = total_components - num_unique_colors;
+    if splits > 0 {
+        score -= splits * 100; // -100 per extra disconnected component
+    }
 
     score
 }

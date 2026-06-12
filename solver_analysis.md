@@ -15,15 +15,16 @@ Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approx
 
 | Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BeamSearch (W=5000) [Predictive Heuristic + Orphan Penalty]** | **5161.4** | **8340** | **89.0%** | **1.32s** |
-| 🥈 | **BeamSearch (W=500) [Predictive Heuristic + Orphan Penalty]** | 4706.9 | 7915 | 65.0% | 0.13s |
-| 🥉 | **SP-MCTS (250ms/move)** | 4537.8 | 6035 | 20.0% | 3.66s |
-| 4 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
-| 5 | **MCTS (100ms/move)** | 4160.9 | 5980 | 23.0% | 1.04s |
-| 6 | **BeamSearch (W=50) [Predictive Heuristic + Orphan Penalty]** | 3999.5 | 7390 | 28.0% | 0.01s |
-| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
+| 🥇 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | **5405.6** | **8340** | **92.0%** | **2.30s** |
+| 🥈 | **BeamSearch (W=5000) [Predictive V1: Orphan Penalty]** | 5161.4 | 8340 | 89.0% | 1.32s |
+| 🥉 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5031.2 | 8325 | 68.0% | 0.23s |
+| 4 | **BMCTS (W=100, N=20) [MISPS Rollout]** | 4577.1 | 6485 | 67.0% | 3.41s |
+| 5 | **SP-MCTS (250ms/move)** | 4535.6 | 6855 | 22.0% | 3.76s |
+| 6 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
+| 7 | **MCTS (100ms/move)** | 4233.0 | 5505 | 24.0% | 1.01s |
+| 8 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
 
-Beam Search (W=5000) with the explicit **-5000 Orphan Penalty** and native Bitboard evaluation achieves a breathtaking **89% Clear Rate** and shatters the 5000 point barrier on average!
+Beam Search (W=5000) with the explicit **-5000 Orphan Penalty** and **-100 Component Split Penalty** achieves a breathtaking **92% Clear Rate** and an average score of **5405.6**! By penalizing states where colors are fragmented into multiple disconnected components, the algorithm naturally preserves large continuous blocks, drastically increasing the perfect clear rate.
 
 ## 2. Agentic Improvement Loop (Protocol for Autonomous AI)
 
@@ -66,6 +67,11 @@ Your goal is to beat the current top average score and perfect clear rate on the
             ```bash
             jj new -m "feat: <describe your algorithm optimization>"
             ```
+
+4.  **Resiliency & Worklog (State Hand-off Mechanism):**
+    *   **Because background models may occasionally fail or be interrupted (e.g., 503 capacity errors), you MUST maintain an `agent_worklog.md` in your workspace.**
+    *   Every time you form a hypothesis, finish a code change, or get a new benchmark result, append it to `agent_worklog.md` and commit it immediately using `jj new -m "chore: update worklog"`.
+    *   If you are a freshly spawned agent taking over an existing workspace, your VERY FIRST ACTION must be to read `agent_worklog.md` to understand the previous agent's progress, what failed, and what you need to do next to seamlessly resume the work.
 5.  **Iteration:**
     *   Once a new baseline is established, repeat the entire loop. Keep pushing the theoretical limits of the 10x10 PopStar board!
 
@@ -81,3 +87,13 @@ Based on research into solving the **SameGame** / **Clickomania** NP-Complete pr
     A hybrid approach. It uses Beam Search to prune the tree (keeping only the top $K$ nodes per depth), but instead of using a static heuristic to rank the nodes, it uses MCTS rollouts to evaluate their true potential. This combines the narrow-and-deep focus of Beam Search with the accurate dynamic evaluation of MCTS.
 4.  **RAVE (Rapid Action Value Estimation):**
     An enhancement for MCTS that shares the value of actions (moves) across different branches of the tree. If eliminating a specific green block proves highly valuable in one branch, RAVE biases the search to try that same elimination early in other branches, drastically speeding up convergence in the early stages of the search.
+
+## 4. Architectural Decoupling: The $N \times M$ Matrix
+
+Future agents must treat **Search Algorithms** and **Heuristics (Evaluation Functions)** as two strictly orthogonal (independent) dimensions. We want to be able to mix and match any Search Algorithm $N$ with any Heuristic $M$ (e.g., `BeamSearch + Predictive V2`, `MCTS + Predictive V1`).
+
+### Important Constraint for DFS (Branch & Bound):
+While approximate search algorithms (Beam Search, MCTS, Greedy) can use ANY heuristic (predictive, non-admissible, etc.), **Exact DFS MUST use an Admissible Heuristic**. 
+*   **Admissible** means the heuristic *never* underestimates the true cost to reach the goal (in our case, never underestimates the max possible score).
+*   If you feed a predictive heuristic (which uses negative penalties like the Orphan Penalty) into DFS, DFS will use those low bounds to incorrectly prune the optimal branch, destroying its guarantee to find the mathematically perfect solution.
+*   Therefore, any efforts to improve exact DFS must focus strictly on designing tighter *Admissible* upper bounds. Any efforts to improve practical solving for 10x10 boards should focus on $N \times M$ combinations of Approximate Algorithms with Predictive Heuristics.
