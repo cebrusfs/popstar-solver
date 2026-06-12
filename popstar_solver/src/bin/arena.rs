@@ -1,4 +1,4 @@
-use popstar_solver::advanced_solvers::MctsAgent;
+use popstar_solver::advanced_solvers::{MctsAgent, SpMctsAgent};
 use popstar_solver::engine::{Board, Game, Tile, BOARD_SIZE};
 use popstar_solver::heuristics::{
     calculate_admissible_heuristic, calculate_predictive_heuristic, choose_move_misps,
@@ -177,6 +177,37 @@ impl Agent for ArenaMctsAgent {
     }
 }
 
+
+struct ArenaSpMctsAgent {
+    max_iterations: usize,
+    time_budget_ms: u64,
+    exploration_c: f64,
+}
+impl Agent for ArenaSpMctsAgent {
+    fn name(&self) -> &str {
+        "SP-MCTS-250ms"
+    }
+    fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
+        let start = Instant::now();
+        let mcts = SpMctsAgent::new(self.max_iterations, self.time_budget_ms, self.exploration_c);
+        let mut board = initial_board.clone();
+        let mut score = 0;
+
+        while !board.is_game_over() {
+            if let Some((_, move_score, next_board)) = mcts.select_move(&board, score) {
+                board = next_board;
+                score += move_score;
+            } else {
+                break;
+            }
+        }
+        let final_bonus = Game::new_with_board(board.clone()).final_score() as i32;
+        score += final_bonus;
+
+        (score as i32, start.elapsed().as_secs_f64(), count_remaining(&board))
+    }
+}
+
 fn main() {
     println!("=== PopStar AI Arena ===");
 
@@ -190,11 +221,12 @@ fn main() {
     let beam_agent_50 = BeamSearchAgent { beam_width: 50 };
     let beam_agent_500 = BeamSearchAgentW500 { beam_width: 500 };
     let beam_agent_5000 = BeamSearchAgentW5000 { beam_width: 5000 };
+    let sp_mcts_agent = ArenaSpMctsAgent { max_iterations: 20000, time_budget_ms: 250, exploration_c: 500.0 };
     let mcts_agent =
         ArenaMctsAgent { max_iterations: 5000, time_budget_ms: 50, exploration_c: 1000.0 };
 
     let agents: Vec<&dyn Agent> =
-        vec![&beam_agent_5000, &beam_agent_500, &beam_agent_50, &mcts_agent, &greedy_agent];
+        vec![&beam_agent_5000, &beam_agent_500, &beam_agent_50, &sp_mcts_agent, &mcts_agent, &greedy_agent];
 
     let agent_names: Vec<&str> = agents.iter().map(|a| a.name()).collect();
     println!("Agents: {}", agent_names.join(", "));
