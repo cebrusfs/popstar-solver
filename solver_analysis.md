@@ -8,28 +8,29 @@ For foundational knowledge on the game rules, NP-Complete mathematical equivalen
 Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approximation algorithms. To test them, we built the **AI Arena** (`src/bin/arena.rs`), an automated benchmark platform that evaluates agents across a **Golden Set of 100 random seeds (Seeds 1~100)** using Rayon for multithreading.
 
 ### AI Algorithms Implemented:
-1.  **Beam Search:** Instead of keeping all branches (DFS), Beam Search keeps only the top $K$ most promising states at each depth level. Using `K=5000`, we are able to look ahead all the way to the end of the game in under 2 seconds.
-2.  **Monte Carlo Tree Search (MCTS):** Uses our ultra-fast zero-allocation engine to perform rapid playouts (using UCB1 selection and MISPS rollouts). We grant it a fixed time budget per move (e.g., 100ms).
+1.  **Beam Search:** Instead of keeping all branches (DFS), Beam Search keeps only the top $K$ most promising states at each depth level. Using `K=5000`, we are able to look ahead all the way to the end of the game in under 1.5 seconds.
+2.  **Monte Carlo Tree Search (MCTS) & SP-MCTS:** Uses our ultra-fast zero-allocation bitboard engine to perform rapid playouts (using UCB1 selection and MISPS rollouts). We grant it a fixed time budget per move (e.g., 100ms or 250ms).
 
 ### Golden Set Benchmark (100 Seeds)
 
 | Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BeamSearch (W=5000) [Predictive Heuristic]** | **4940.1** | **8310** | **74.0%** | **2.43s** |
-| 🥈 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
-| 🥉 | **BeamSearch (W=500) [Predictive Heuristic]** | 4267.2 | 8180 | 42.0% | 0.24s |
-| 4 | **MCTS (100ms/move)** | 4242.6 | 5865 | 22.0% | 1.01s |
-| 5 | **BeamSearch (W=50) [Predictive Heuristic]** | 3367.8 | 6660 | 9.0% | 0.02s |
-| 6 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
+| 🥇 | **BeamSearch (W=5000) [Predictive Heuristic + Orphan Penalty]** | **5161.4** | **8340** | **89.0%** | **1.32s** |
+| 🥈 | **BeamSearch (W=500) [Predictive Heuristic + Orphan Penalty]** | 4706.9 | 7915 | 65.0% | 0.13s |
+| 🥉 | **SP-MCTS (250ms/move)** | 4537.8 | 6035 | 20.0% | 3.66s |
+| 4 | **DFS Depth 5 (Baseline)** | 4467.8 | 5735 | N/A | 0.54s |
+| 5 | **MCTS (100ms/move)** | 4160.9 | 5980 | 23.0% | 1.04s |
+| 6 | **BeamSearch (W=50) [Predictive Heuristic + Orphan Penalty]** | 3999.5 | 7390 | 28.0% | 0.01s |
+| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
 
-Beam Search (W=5000) with the new predictive heuristic achieves a breathtaking **74% Clear Rate** and consistently shatters the 8000 point limit, pushing the average score near 5000.
+Beam Search (W=5000) with the explicit **-5000 Orphan Penalty** and native Bitboard evaluation achieves a breathtaking **89% Clear Rate** and shatters the 5000 point barrier on average!
 
 ## 2. Agentic Improvement Loop (Protocol for Autonomous AI)
 
 This section contains exact instructions for future AI agents to continue improving the solver autonomously without requiring user intervention. Future AI agents must strictly follow this step-by-step loop.
 
 ### Objective
-Your goal is to beat the current top average score and perfect clear rate on the **Golden Set Benchmark (100 Seeds)**. Currently, the target to beat is the 🥇 **BeamSearch (W=5000)** baseline.
+Your goal is to beat the current top average score and perfect clear rate on the **Golden Set Benchmark (100 Seeds)**. Currently, the target to beat is the 🥇 **BeamSearch (W=5000)** baseline (89% clear rate).
 
 ### Step-by-Step Execution Protocol
 

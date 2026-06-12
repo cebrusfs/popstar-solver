@@ -39,25 +39,40 @@ pub fn count_unique_colors(board: &Board) -> usize {
 /// The total count of truly isolated tiles as `u32`.
 pub fn count_truly_isolated_tiles(board: &Board) -> u32 {
     let mut isolated_count = 0;
-    let grid = board.to_grid();
-    for r in 0..crate::engine::BOARD_SIZE {
-        for c in 0..crate::engine::BOARD_SIZE {
-            let tile = grid[r][c];
-            if tile != Tile::Empty {
-                let mut isolated = true;
-                if r > 0 && grid[r - 1][c] == tile {
-                    isolated = false;
-                } else if r + 1 < crate::engine::BOARD_SIZE && grid[r + 1][c] == tile {
-                    isolated = false;
-                } else if c > 0 && grid[r][c - 1] == tile {
-                    isolated = false;
-                } else if c + 1 < crate::engine::BOARD_SIZE && grid[r][c + 1] == tile {
-                    isolated = false;
-                }
+    let cols = board.columns();
+    for c in 0..crate::engine::BOARD_SIZE {
+        let col = cols[c];
+        if col == 0 {
+            continue;
+        }
+        let left_col = if c > 0 { cols[c - 1] } else { 0 };
+        let right_col = if c + 1 < crate::engine::BOARD_SIZE { cols[c + 1] } else { 0 };
 
-                if isolated {
-                    isolated_count += 1;
-                }
+        for r in 0..crate::engine::BOARD_SIZE {
+            let shift = (crate::engine::BOARD_SIZE - 1 - r) * 3;
+            let tile = (col >> shift) & 0b111;
+            if tile == 0 { continue; }
+
+            let mut isolated = true;
+            if r > 0 {
+                let up = (col >> ((crate::engine::BOARD_SIZE - r) * 3)) & 0b111;
+                if up == tile { isolated = false; }
+            }
+            if isolated && r + 1 < crate::engine::BOARD_SIZE {
+                let down = (col >> ((crate::engine::BOARD_SIZE - 2 - r) * 3)) & 0b111;
+                if down == tile { isolated = false; }
+            }
+            if isolated && c > 0 {
+                let left = (left_col >> shift) & 0b111;
+                if left == tile { isolated = false; }
+            }
+            if isolated && c + 1 < crate::engine::BOARD_SIZE {
+                let right = (right_col >> shift) & 0b111;
+                if right == tile { isolated = false; }
+            }
+
+            if isolated {
+                isolated_count += 1;
             }
         }
     }
@@ -752,14 +767,14 @@ pub fn calculate_admissible_heuristic(board: &Board) -> u32 {
 /// # Returns
 /// An `i32` representing the predictive heuristic score.
 pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
-    let mut color_counts = std::collections::HashMap::new();
-
-    for r in 0..BOARD_SIZE {
-        for c in 0..BOARD_SIZE {
-            let tile = board.get_tile(r, c);
-            if tile != Tile::Empty {
-                *color_counts.entry(tile).or_insert(0i32) += 1;
-            }
+    let mut color_counts = [0; 8];
+    let cols = board.columns();
+    
+    for &col in cols {
+        let mut c = col;
+        while c != 0 {
+            color_counts[(c & 0b111) as usize] += 1;
+            c >>= 3;
         }
     }
 
@@ -767,7 +782,8 @@ pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
     let mut has_orphan = false;
     let mut remaining_tiles = 0;
 
-    for &count in color_counts.values() {
+    for &count in &color_counts[1..=6] {
+        if count == 0 { continue; }
         if count == 1 {
             has_orphan = true;
         }
@@ -777,13 +793,16 @@ pub fn calculate_predictive_heuristic(board: &Board) -> i32 {
 
     if remaining_tiles == 0 {
         score += 2000;
-    } else if !has_orphan {
+    } else if has_orphan {
+        // Explicit penalty because an orphan means a perfect clear is impossible
+        score -= 5000;
+    } else {
         // Optimistic chance of clearing the board
         score += 1000;
     }
 
     let isolated = count_truly_isolated_tiles(board) as i32;
-    score -= isolated * 40;
+    score -= isolated * 200;
 
     score
 }

@@ -119,6 +119,8 @@ impl Board {
         board
     }
 
+    pub fn columns(&self) -> &[u32; BOARD_SIZE] { &self.columns }
+
     pub fn to_grid(&self) -> [[Tile; BOARD_SIZE]; BOARD_SIZE] {
         let mut grid = [[Tile::Empty; BOARD_SIZE]; BOARD_SIZE];
         for r in 0..BOARD_SIZE {
