@@ -19,20 +19,20 @@ This means **Search Algorithms** ($N$) and **Heuristics/Evaluation Functions** (
 
 ```mermaid
 flowchart TD
-    subgraph AI Arena (arena.rs)
+    subgraph arena["AI Arena (arena.rs)"]
         A[Arena Main Entry]
         B[BeamSearchAgent]
         C[DFSAgent]
         D[MCTSAgent]
     end
 
-    subgraph Search Strategies (N)
+    subgraph search_n["Search Strategies (N)"]
         E[Beam Search Algorithm]
         G[Depth First Search]
         K[Monte Carlo Tree Search]
     end
 
-    subgraph Heuristics (M)
+    subgraph heuristics_m["Heuristics (M)"]
         F[calculate_predictive_heuristic_v2]
         H[calculate_admissible_heuristic]
         L[choose_move_misps / Rollout Policy]
