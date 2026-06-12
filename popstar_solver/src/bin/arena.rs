@@ -45,11 +45,13 @@ impl Agent for GreedyAgent {
 }
 
 struct BeamSearchAgent {
+    name: String,
     beam_width: usize,
+    heuristic: fn(&Board) -> i32,
 }
 impl Agent for BeamSearchAgent {
     fn name(&self) -> &str {
-        "BeamSearch"
+        &self.name
     }
     fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
         let start = Instant::now();
@@ -109,7 +111,7 @@ impl Agent for BeamSearchAgent {
             let mut unique_vec: Vec<(Board, i32)> = unique_states.into_values().collect();
 
             unique_vec.sort_by_cached_key(|(b, s)| {
-                let h = calculate_predictive_heuristic(b);
+                let h = (self.heuristic)(b);
                 -(s + h)
             });
 
@@ -118,32 +120,6 @@ impl Agent for BeamSearchAgent {
         }
 
         (best_final_score as i32, start.elapsed().as_secs_f64(), min_remaining)
-    }
-}
-
-struct BeamSearchAgentW500 {
-    beam_width: usize,
-}
-impl Agent for BeamSearchAgentW500 {
-    fn name(&self) -> &str {
-        "BeamSearch-W500"
-    }
-    fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
-        let beam_agent = BeamSearchAgent { beam_width: self.beam_width };
-        beam_agent.play(initial_board)
-    }
-}
-
-struct BeamSearchAgentW5000 {
-    beam_width: usize,
-}
-impl Agent for BeamSearchAgentW5000 {
-    fn name(&self) -> &str {
-        "BeamSearch-W5000"
-    }
-    fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
-        let beam_agent = BeamSearchAgent { beam_width: self.beam_width };
-        beam_agent.play(initial_board)
     }
 }
 
@@ -324,9 +300,9 @@ fn main() {
 
     let greedy_agent = GreedyAgent;
     let bmcts_agent = BmctsAgent { beam_width: 100, rollout_count: 20 };
-    let beam_agent_50 = BeamSearchAgent { beam_width: 50 };
-    let beam_agent_500 = BeamSearchAgentW500 { beam_width: 500 };
-    let beam_agent_5000 = BeamSearchAgentW5000 { beam_width: 5000 };
+    let beam_agent_50 = BeamSearchAgent { name: "BeamSearch-W50-V2".to_string(), beam_width: 50, heuristic: calculate_predictive_heuristic };
+    let beam_agent_500 = BeamSearchAgent { name: "BeamSearch-W500-V2".to_string(), beam_width: 500, heuristic: calculate_predictive_heuristic };
+    let beam_agent_5000 = BeamSearchAgent { name: "BeamSearch-W5000-V2".to_string(), beam_width: 5000, heuristic: calculate_predictive_heuristic };
     let sp_mcts_agent = ArenaSpMctsAgent { max_iterations: 20000, time_budget_ms: 250, exploration_c: 500.0 };
     let mcts_agent =
         ArenaMctsAgent { max_iterations: 5000, time_budget_ms: 50, exploration_c: 1000.0 };
