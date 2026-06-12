@@ -18,6 +18,7 @@
 //! - `heuristics`: Defines various strategies and helper functions for choosing moves or evaluating board states.
 //! - `utils`: Provides utility functions, such as parsing board configurations from strings.
 
+pub mod advanced_solvers;
 pub mod engine;
 pub mod heuristics;
 pub mod solver;
