@@ -253,7 +253,15 @@ impl Agent for RolloutBeamSearchAgent {
             unique_vec.par_sort_by_cached_key(|(b, s)| {
                 let mut rollout_board = b.clone();
                 let mut r_score = 0;
+                let mut used_endgame = false;
                 while !rollout_board.is_game_over() {
+                    let remaining = count_remaining(&rollout_board);
+                    if remaining <= 18 {
+                        r_score += popstar_solver::endgame::solve_endgame(&rollout_board);
+                        used_endgame = true;
+                        break;
+                    }
+
                     let groups = rollout_board.find_all_group_clicks_with_len();
                     if groups.is_empty() { break; }
                     
@@ -288,7 +296,8 @@ impl Agent for RolloutBeamSearchAgent {
                     rollout_board.apply_gravity();
                     rollout_board.shift_columns();
                 }
-                let final_bonus = Game::new_with_board(rollout_board).final_score() as i32;
+
+                let final_bonus = if used_endgame { 0 } else { Game::new_with_board(rollout_board).final_score() as i32 };
                 let combined_score = *s + r_score + final_bonus;
                 
                 std::cmp::Reverse(combined_score)
@@ -333,12 +342,6 @@ fn main() {
         &rollout_beam_100,
         &rollout_beam_500,
         &rollout_beam_2000,
-        &beam_agent_5000,
-        &beam_agent_500,
-        &sp_mcts_agent,
-        &mcts_agent,
-        &nrpa_l2_100,
-        &greedy_agent
     ];
     let agent_names: Vec<&str> = agents.iter().map(|a| a.name()).collect();
     println!("Agents: {}", agent_names.join(", "));
