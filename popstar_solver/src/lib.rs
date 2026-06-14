@@ -20,6 +20,7 @@
 
 pub mod advanced_solvers;
 pub mod engine;
-pub mod heuristics;
 pub mod solver;
+pub mod heuristics;
+pub mod endgame;
 pub mod utils;

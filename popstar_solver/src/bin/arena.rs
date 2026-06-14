@@ -184,13 +184,13 @@ impl Agent for ArenaSpMctsAgent {
     }
 }
 
-struct BmctsAgent {
+struct RolloutBeamSearchAgent {
+    name: String,
     beam_width: usize,
-    rollout_count: usize,
 }
-impl Agent for BmctsAgent {
+impl Agent for RolloutBeamSearchAgent {
     fn name(&self) -> &str {
-        "BMCTS-W100-N20-V2"
+        &self.name
     }
     fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
         let start = Instant::now();
@@ -251,50 +251,45 @@ impl Agent for BmctsAgent {
             let mut unique_vec: Vec<(Board, i32)> = unique_states.into_values().collect();
 
             unique_vec.par_sort_by_cached_key(|(b, s)| {
-                let mut total_rollout_score = 0;
-                for _ in 0..self.rollout_count {
-                    let mut rollout_board = b.clone();
-                    let mut r_score = 0;
-                    while !rollout_board.is_game_over() {
-                        let groups = rollout_board.find_all_group_clicks_with_len();
-                        if groups.is_empty() { break; }
+                let mut rollout_board = b.clone();
+                let mut r_score = 0;
+                while !rollout_board.is_game_over() {
+                    let groups = rollout_board.find_all_group_clicks_with_len();
+                    if groups.is_empty() { break; }
+                    
+                    let mut best_move = groups[0].0;
+                    let mut best_heuristic = i32::MIN;
+                    
+                    for &(pos, len) in &groups {
+                        let mut temp = rollout_board.clone();
+                        temp.eliminate_group_by_click(pos.0, pos.1);
+                        temp.apply_gravity();
+                        temp.shift_columns();
                         
-                        let mut best_move = groups[0].0;
-                        let mut best_heuristic = i32::MIN;
+                        let move_score = (len * len * 5) as i32;
+                        let h = calculate_predictive_heuristic(&temp);
+                        let total_h = move_score + h;
                         
-                        for &(pos, len) in &groups {
-                            let mut temp = rollout_board.clone();
-                            temp.eliminate_group_by_click(pos.0, pos.1);
-                            temp.apply_gravity();
-                            temp.shift_columns();
-                            
-                            let move_score = (len * len * 5) as i32;
-                            let h = calculate_predictive_heuristic(&temp);
-                            let total_h = move_score + h;
-                            
-                            if total_h > best_heuristic {
-                                best_heuristic = total_h;
-                                best_move = pos;
-                            }
+                        if total_h > best_heuristic {
+                            best_heuristic = total_h;
+                            best_move = pos;
                         }
-                        
-                        let mut matched_len = 0;
-                        for &(pos, len) in &groups {
-                            if pos == best_move {
-                                matched_len = len;
-                                break;
-                            }
-                        }
-                        r_score += (matched_len * matched_len * 5) as i32;
-                        rollout_board.eliminate_group_by_click(best_move.0, best_move.1);
-                        rollout_board.apply_gravity();
-                        rollout_board.shift_columns();
                     }
-                    let final_bonus = Game::new_with_board(rollout_board).final_score() as i32;
-                    total_rollout_score += r_score + final_bonus;
+                    
+                    let mut matched_len = 0;
+                    for &(pos, len) in &groups {
+                        if pos == best_move {
+                            matched_len = len;
+                            break;
+                        }
+                    }
+                    r_score += (matched_len * matched_len * 5) as i32;
+                    rollout_board.eliminate_group_by_click(best_move.0, best_move.1);
+                    rollout_board.apply_gravity();
+                    rollout_board.shift_columns();
                 }
-                let avg_rollout_score = total_rollout_score / (self.rollout_count as i32);
-                let combined_score = *s + avg_rollout_score;
+                let final_bonus = Game::new_with_board(rollout_board).final_score() as i32;
+                let combined_score = *s + r_score + final_bonus;
                 
                 std::cmp::Reverse(combined_score)
             });
@@ -319,7 +314,9 @@ fn main() {
     let total_games = seeds.len();
 
     let greedy_agent = GreedyAgent;
-    let bmcts_agent = BmctsAgent { beam_width: 100, rollout_count: 20 };
+    let rollout_beam_100 = RolloutBeamSearchAgent { name: "RolloutBeam-W100".to_string(), beam_width: 100 };
+    let rollout_beam_500 = RolloutBeamSearchAgent { name: "RolloutBeam-W500".to_string(), beam_width: 500 };
+    let rollout_beam_2000 = RolloutBeamSearchAgent { name: "RolloutBeam-W2000".to_string(), beam_width: 2000 };
     let beam_agent_50 = BeamSearchAgent { name: "BeamSearch-W50-V2".to_string(), beam_width: 50, heuristic: calculate_predictive_heuristic };
     let beam_agent_500 = BeamSearchAgent { name: "BeamSearch-W500-V2".to_string(), beam_width: 500, heuristic: calculate_predictive_heuristic };
     let beam_agent_5000 = BeamSearchAgent { name: "BeamSearch-W5000-V2".to_string(), beam_width: 5000, heuristic: calculate_predictive_heuristic };
@@ -333,7 +330,9 @@ fn main() {
     let nrpa_l3_20 = ArenaNrpaAgent { level: 3, iterations: 20, alpha: 1.0 };
     let nrpa_l3_40 = ArenaNrpaAgent { level: 3, iterations: 40, alpha: 1.0 };
     let agents: Vec<&dyn Agent> = vec![
-        &bmcts_agent,
+        &rollout_beam_100,
+        &rollout_beam_500,
+        &rollout_beam_2000,
         &beam_agent_5000,
         &beam_agent_500,
         &sp_mcts_agent,
