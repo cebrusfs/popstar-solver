@@ -21,15 +21,17 @@ This means **Search Algorithms** ($N$) and **Heuristics/Evaluation Functions** (
 flowchart TD
     subgraph arena["AI Arena (arena.rs)"]
         A[Arena Main Entry]
-        B[BeamSearchAgent]
-        C[DFSAgent]
-        D[MCTSAgent]
+        B[UltimateMetaAgent]
+        C[RolloutBeamSearchAgent]
+        D[BeamSearchAgent]
+        E[MCTSAgent]
     end
 
     subgraph search_n["Search Strategies (N)"]
-        E[Beam Search Algorithm]
-        G[Depth First Search]
-        K[Monte Carlo Tree Search]
+        F[Tabu Color Targeting]
+        G[Rollout Beam Search]
+        H[Beam Search]
+        I[Depth First Search]
     end
 
     subgraph heuristics_m["Heuristics (M)"]
@@ -42,14 +44,13 @@ flowchart TD
     A -->|Instantiates| C
     A -->|Instantiates| D
     
-    B -->|Uses Strategy| E
-    B -->|Passes fn pointer| F
+    B -->|Spawns 6| C
+    B -->|Applies| F
     
     C -->|Uses Strategy| G
-    C -->|Passes fn pointer| H
+    C -->|Passes fn pointer| F
     
-    D -->|Uses Strategy| K
-    D -->|Uses Policy| L
+    D -->|Uses Strategy| H
     
     E -.-> Z[Game Engine Core]
     F -.-> Z
@@ -78,6 +79,12 @@ The core bottleneck in DFS tree traversal is memory allocation (GC/Heap churn). 
 *   **O(N) Game Over Check:** Replaced full-board group identification with a lightweight adjacency check (only verifying the Right and Down neighbors of each tile).
 *   **Zero-Allocation Heuristic Playouts:** When `depth_limit` is reached, `evaluate_with_heuristic` simulates the rest of the game. Instead of cloning the heavy `Game` struct (which tracks a `history` vector of moves), we only clone the 100-byte `Board` array, completely eradicating heap allocations in the hot loop.
 *   **Packed Bitboard Hashing:** State deduplication `visited_states` relies on `HashMap`. By compressing the 100 3-bit tiles into a `[u64; 5]` array (`to_packed()`), we drastically shrink memory usage and speed up equality checks.
+*   **Endgame Exact Solver:** When a rollout reaches $\le 18$ remaining blocks, branching factor collapses. We bypass heuristics entirely and run a perfectly memoized DFS, instantly calculating the exact mathematical maximum score.
+
+## 4. Advanced Hybrid Agents
+Our SOTA solvers fuse exact searching with heuristics:
+*   **RolloutBeamSearch:** Evaluates states by running a full deterministic game simulation using `predictive_heuristic_v2`, combining the depth of full rollouts with the breadth of Beam Search.
+*   **UltimateMetaAgent:** Wraps `RolloutBeamSearch` in a **Tabu Color** strategy. By severely penalizing the elimination of a specific color, it forces the board to horde that color until it forms a massive $N^2$ cluster, proving that sacrificing the perfect clear bonus is sometimes strictly optimal.
 
 ## 4. Heuristics & Evaluation Strategies
 

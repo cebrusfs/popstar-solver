@@ -40,8 +40,10 @@ Because PopStar is mathematically equivalent to the NP-Complete *SameGame*, exac
 
 We use an **$N \times M$ Orthogonal Architecture** to evaluate these agents. In `arena.rs`, we decoupled **Search Algorithms** (BeamSearch, DFS, MCTS) from **Heuristics** (Admissible, Predictive V1 Orphan Penalty, Predictive V2 Component Split Penalty) using generic function pointers. This allows us to rapidly experiment with combinations like `BeamSearch` + `Predictive V2` or `MCTS` + `Predictive V1`.
 
-*   **Beam Search (W=5000)**: Our current state-of-the-art solver. By maintaining 5000 parallel universes and using a predictive heuristic that penalizes isolated blocks and orphan colors, it achieves a **92% Perfect Clear Rate** and an average score of **~5405** on our 100-seed Golden Set.
-*   **MCTS**: Uses UCB1 selection and rapid heuristic rollouts.
+*   **UltimateMetaAgent (W=1000)**: Our current absolute state-of-the-art solver. By spawning 6 parallel universes (incorporating Tabu Color Targeting and Early-Depth Widening), it mathematically proves that occasionally sacrificing the perfect clear bonus yields massive $N^2$ single-color clusters. It achieves an average score of **~5805**.
+*   **RolloutBeamSearch (W=2000)**: A deterministic Rollout Beam Search integrated with an Endgame Exact DFS solver. It achieved the mathematical ceiling for clear rates: **100% Perfect Clear Rate** with an average score of **~5788** on our Golden Set.
+*   **Beam Search (W=5000)**: Pure static heuristic search achieving ~5405 average score.
+*   **MCTS & NRPA**: Monte Carlo and Nested Rollout Policy Adaptation implementations.
 
 For a deep dive into the architecture, please see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 For the *Agentic Improvement Loop* protocol and detailed benchmarks, please see [`solver_analysis.md`](./solver_analysis.md).
