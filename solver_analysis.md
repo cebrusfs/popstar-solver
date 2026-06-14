@@ -52,6 +52,7 @@ For future AI Agents working on this project autonomously, follow this protocol:
 
 If we want to push past 6000 points, we must explore:
 
-1. **Global Transposition Tables**: Instead of unique-ing states per depth, unique them globally across the entire DAG to share Endgame solutions instantly.
-2. **A* / IDA* with Tighter Bounds**: Our current admissible heuristic ($N_c^2 \times 5$) is too optimistic. A tighter parity-based heuristic could perfectly solve the endgame starting from 30+ blocks.
-3. **AlphaZero-Style Deep Reinforcement Learning**: Training a CNN to replace `predictive_heuristic_v2` with an intuition trained on self-play.
+1. **Dynamic Tabu-Ensemble Rollouts (Decoupling the Meta Agent)**: Currently, `UltimateMetaAgent` statically assigns a Tabu color at depth 0 and commits to it. This is a rigid, macro-level split. A mathematically superior approach is to convert Tabu into an **Evaluation Function** (`NodeEvaluator`). At *every* node in the Beam Search, the engine runs 6 simultaneous rollouts (1 Baseline + 5 Tabu colors) and assigns the node a value equal to the `max` of the 6 rollouts. This allows the Beam Search to dynamically switch which color it is hording at any depth.
+2. **Deep-Dive Root Expansions (Shallow DFS)**: Beam Search often falters in the first 5 moves because gravity hasn't collapsed the board enough for heuristics to be accurate. We should bypass heuristics for the first $K$ moves, fully expanding the tree (DFS) to seed the Beam with highly diverse macroscopic board states.
+3. **Global Transposition Tables**: Instead of unique-ing states per depth, unique them globally across the entire DAG to share Endgame solutions instantly.
+4. **A* / IDA* with Tighter Bounds**: Our current admissible heuristic ($N_c^2 \times 5$) is too optimistic. A tighter parity-based heuristic could perfectly solve the endgame starting from 30+ blocks.
