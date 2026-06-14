@@ -1,76 +1,85 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
+import argparse
+import math
+from PIL import Image
 
-from PIL import Image, ImageFilter
-
-if len(sys.argv) > 1:
-    path = sys.argv[1]
-else:
-    #path = './IMG_4990.PNG'
-    path = './2017-05-11.jpg'
-
-sizedict = {
-    (640, 1136): {
-        'crop_hight': 498,
-        'width': 64,
-    },
-    (750, 1334): {
-        'crop_hight': 584,
-        'width': 75,
-    },
+# Known popstar colors (approximate RGB centroids)
+COLORS = {
+    'R': (220, 50, 50),
+    'G': (50, 200, 50),
+    'B': (50, 100, 220),
+    'Y': (220, 200, 50),
+    'P': (200, 80, 200),
+    '.': (20, 20, 20), # Empty background (dark)
 }
 
+def color_distance(c1, c2):
+    # Euclidean distance in RGB space
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(c1[:3], c2[:3])))
 
+def closest_color(pixel):
+    best_char = '.'
+    min_dist = float('inf')
+    for char, centroid in COLORS.items():
+        dist = color_distance(pixel, centroid)
+        if dist < min_dist:
+            min_dist = dist
+            best_char = char
+    return best_char
 
-im = Image.open(path)
-setting = sizedict[im.size]
+def parse_args():
+    parser = argparse.ArgumentParser(description="Convert PopStar screenshot to 10x10 text grid")
+    parser.add_argument("image_path", help="Path to the screenshot image")
+    parser.add_argument("--bottom-margin", type=int, default=0, 
+                        help="Pixels from the bottom of the screen to the bottom of the grid (for modern iPhones with home indicator)")
+    return parser.parse_args()
 
-im = im.crop((0, setting['crop_hight'], im.size[0], im.size[1]))
-#im.save("test.bmp")
+def main():
+    args = parse_args()
+    
+    try:
+        im = Image.open(args.image_path)
+    except Exception as e:
+        print(f"Error opening image: {e}", file=sys.stderr)
+        sys.exit(1)
 
-mp = []
-width = setting['width']
-offset = width / 2
+    im = im.convert('RGB')
+    width = im.width
+    height = im.height
 
-rules = {
-    # r, g, b
-    (200, None, 200): 'P',
-    (200, -100, -100): 'R',
-    (150, 100, -100): 'Y',
-    (-50, 200, -50): 'G',
-    (-100, 100, 200): 'B',
-}
+    # Popstar grid is usually a perfect square spanning the full width of the screen.
+    grid_size = width
+    block_size = grid_size / 10.0
+    
+    # Calculate top crop position
+    # The grid is usually at the bottom of the screen. 
+    top = height - args.bottom_margin - grid_size
 
-def check(rule, color):
-    #print rule, color
-    for r, c in zip(rule, color):
-        if r is None: continue
+    if top < 0:
+        print("Error: Computed crop area is outside the image. Check bottom margin and image dimensions.", file=sys.stderr)
+        sys.exit(1)
 
-        rr = abs(r)
-        if r > 0 and not c > rr:
-            return False
-        if r < 0 and not c < rr:
-            return False
+    mp = []
+    offset = block_size / 2.0
 
-    #print 'good'
-    return True
+    for i in range(10):
+        row_str = ""
+        for j in range(10):
+            # Calculate pixel coordinate to sample (center of the block)
+            x = int(j * block_size + offset)
+            y = int(top + i * block_size + offset)
+            
+            # Ensure within bounds
+            x = min(max(x, 0), width - 1)
+            y = min(max(y, 0), height - 1)
+            
+            pixel = im.getpixel((x, y))
+            char = closest_color(pixel)
+            row_str += char
+        mp.append(row_str)
 
+    print('\n'.join(mp))
 
-for i in range(10):
-    s = ''
-    for j in range(10):
-        xy = (width * j + offset, width * i + offset)
-        c = im.getpixel(xy)
-
-        result = [val for rule, val in rules.items() if check(rule, c)]
-
-        if not result or len(result) > 1:
-            print i, j, c, result
-            assert False
-
-        s += result[0]
-        #print c,
-    mp.append(s)
-    #print ''
-
-print '\n'.join(mp)
+if __name__ == "__main__":
+    main()
