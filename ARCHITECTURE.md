@@ -79,10 +79,24 @@ The core bottleneck in DFS tree traversal is memory allocation (GC/Heap churn). 
 *   **Zero-Allocation Heuristic Playouts:** When `depth_limit` is reached, `evaluate_with_heuristic` simulates the rest of the game. Instead of cloning the heavy `Game` struct (which tracks a `history` vector of moves), we only clone the 100-byte `Board` array, completely eradicating heap allocations in the hot loop.
 *   **Packed Bitboard Hashing:** State deduplication `visited_states` relies on `HashMap`. By compressing the 100 3-bit tiles into a `[u64; 5]` array (`to_packed()`), we drastically shrink memory usage and speed up equality checks.
 
-## 4. Heuristic Strategies (Greedy Baselines)
+## 4. Heuristics & Evaluation Strategies
 
-Several single-step greedy heuristics have been implemented as baselines. They estimate the desirability of game states or moves but are fundamentally limited because they don't look ahead beyond one step:
+The engine implements multiple heuristic functions, ranging from simple greedy single-step choices to complex state evaluators used by Beam Search and DFS.
 
-*   **`choose_move_mis` (Maximize Immediate Score):** Selects the move yielding the highest immediate score.
-*   **`choose_move_misps` (Maximize Immediate Score & Penalize Singletons):** Balances immediate score with a penalty for creating isolated single tiles. (Currently used for our fast playout evaluations).
-*   **`calculate_predictive_heuristic_v1 / v2`:** Assigns penalties to states based on isolated blocks (Orphan Penalty) and disjoint color clusters (Component Split Penalty).
+### Single-Step Greedy Move Selectors
+These heuristics choose the "best" immediate move based on a specific strategy. They are useful for fast playouts (rollouts) or as simple baselines:
+* **`choose_move_mis` (Maximize Immediate Score)**: Selects the move yielding the highest immediate score (`n * n * 5`).
+* **`choose_move_lgp` / `choose_move_sgp` (Largest/Smallest Group Priority)**: Selects the group with the most (or least) tiles, regardless of score.
+* **`choose_move_crp` (Color Reduction Priority)**: Simulates all moves and chooses the one that minimizes the number of unique colors remaining on the board.
+* **`choose_move_misps` (Maximize Immediate Score & Penalize Singletons)**: Balances immediate score with a severe penalty for creating truly isolated single tiles. Used as the default fast playout evaluation.
+* **`choose_move_misps_clear_tiebreak`**: Uses MISPS, but tie-breaks top candidates by choosing the one that minimizes the total number of tiles remaining on the board.
+* **`choose_move_clear_focus` (Clear Focus)**: Simulates moves and selects the one that results in the minimum number of total tiles remaining on the board.
+* **`choose_move_avoid_orphans` (Avoid Orphans)**: Maximizes score but heavily penalizes moves that create "orphan" colors (only 1 tile of that color remaining).
+* **`choose_move_preserve_largest_color_group` (Color Reservation)**: Identifies the largest color group and tries to clear other colors first, assigning a score of 0 to moves that clear the preserved color.
+* **`choose_move_connectivity_focus` (Connectivity Focus)**: Looks ahead one step to maximize the size of the largest group in the *next* board state.
+
+### State Evaluators
+These functions evaluate the overall "goodness" or potential of a given board state, crucial for algorithms like DFS and Beam Search:
+* **`calculate_admissible_heuristic`**: Calculates an optimistic upper bound. It sums `k_C * k_C * 5` for each color `C`, plus the 2000 endgame bonus. Used strictly by **DFS** for Branch and Bound pruning to guarantee optimal paths are never pruned.
+* **`calculate_predictive_heuristic` (Predictive Heuristic V2)**: A realistic static evaluation function designed for **Beam Search**. Instead of just looking at immediate score, it heavily penalizes fragmented boards. It deducts points for isolated tiles, "orphan" colors (which make perfect clears impossible), and crucially, applies a "Component Splitting Penalty" when tiles of the same color are fragmented into multiple disconnected groups.
+
