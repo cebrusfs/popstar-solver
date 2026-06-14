@@ -15,15 +15,15 @@ Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approx
 
 | Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | **5405.9** | **8340** | **92.0%** | **2.34s** |
-| 🥈 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5021.1 | 8325 | 67.0% | 0.24s |
-| 🥉 | **BMCTS (W=100, N=20) [Greedy Rollout]** | 4588.6 | 6485 | 66.0% | 3.43s |
-| 4 | **SP-MCTS (250ms/move)** | 4553.2 | 6455 | 27.0% | 3.67s |
-| 5 | **NRPA (Level=2, Iterations=100)** | 4397.7 | 7250 | 17.0% | 0.52s |
-| 6 | **MCTS (100ms/move)** | 4223.2 | 6015 | 24.0% | 1.02s |
-| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0002s |
+| 🥇 | **BMCTS (W=100, N=20) [Predictive V2 Rollout]** | **5537.3** | **8400** | **73.0%** | **1.70s** |
+| 🥈 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | 5407.9 | 8340 | 92.0% | 3.03s |
+| 🥉 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5013.2 | 8325 | 66.0% | 0.42s |
+| 4 | **SP-MCTS (250ms/move)** | 4548.6 | 6430 | 26.0% | 3.85s |
+| 5 | **NRPA (Level=2, Iterations=100)** | 4439.8 | 7195 | 19.0% | 1.01s |
+| 6 | **MCTS (100ms/move)** | 4193.8 | 5875 | 23.0% | 1.08s |
+| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0003s |
 
-Beam Search (W=5000) with the explicit **-5000 Orphan Penalty** and **-100 Component Split Penalty** achieves a breathtaking **92% Clear Rate** and an average score of **5405.6**! By penalizing states where colors are fragmented into multiple disconnected components, the algorithm naturally preserves large continuous blocks, drastically increasing the perfect clear rate.
+By injecting the **Predictive V2 (Component Split Penalty)** into the rollout phase of BMCTS, we successfully broke the previous 5405-point ceiling! The new **BMCTS-W100-N20-V2** achieves an incredible average score of **5537.3** and a new maximum score of **8400**. Furthermore, thanks to Rayon-powered parallel sorting, it runs almost twice as fast as the heavy `W=5000` Beam Search.
 
 ## 2. Agentic Improvement Loop (Protocol for Autonomous AI)
 

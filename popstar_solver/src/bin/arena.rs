@@ -190,7 +190,7 @@ struct BmctsAgent {
 }
 impl Agent for BmctsAgent {
     fn name(&self) -> &str {
-        "BMCTS-W100-N20"
+        "BMCTS-W100-N20-V2"
     }
     fn play(&self, initial_board: &Board) -> (i32, f64, usize) {
         let start = Instant::now();
@@ -250,7 +250,7 @@ impl Agent for BmctsAgent {
 
             let mut unique_vec: Vec<(Board, i32)> = unique_states.into_values().collect();
 
-            unique_vec.sort_by_cached_key(|(b, s)| {
+            unique_vec.par_sort_by_cached_key(|(b, s)| {
                 let mut total_rollout_score = 0;
                 for _ in 0..self.rollout_count {
                     let mut rollout_board = b.clone();
@@ -258,16 +258,34 @@ impl Agent for BmctsAgent {
                     while !rollout_board.is_game_over() {
                         let groups = rollout_board.find_all_group_clicks_with_len();
                         if groups.is_empty() { break; }
-                        let mut max_len = 0;
-                        let mut best_move = (0, 0);
+                        
+                        let mut best_move = groups[0].0;
+                        let mut best_heuristic = i32::MIN;
+                        
                         for &(pos, len) in &groups {
-                            if len > max_len {
-                                max_len = len;
+                            let mut temp = rollout_board.clone();
+                            temp.eliminate_group_by_click(pos.0, pos.1);
+                            temp.apply_gravity();
+                            temp.shift_columns();
+                            
+                            let move_score = (len * len * 5) as i32;
+                            let h = calculate_predictive_heuristic(&temp);
+                            let total_h = move_score + h;
+                            
+                            if total_h > best_heuristic {
+                                best_heuristic = total_h;
                                 best_move = pos;
                             }
                         }
-                        let move_score = max_len * max_len * 5;
-                        r_score += move_score as i32;
+                        
+                        let mut matched_len = 0;
+                        for &(pos, len) in &groups {
+                            if pos == best_move {
+                                matched_len = len;
+                                break;
+                            }
+                        }
+                        r_score += (matched_len * matched_len * 5) as i32;
                         rollout_board.eliminate_group_by_click(best_move.0, best_move.1);
                         rollout_board.apply_gravity();
                         rollout_board.shift_columns();
@@ -287,16 +305,18 @@ impl Agent for BmctsAgent {
 
         (best_final_score as i32, start.elapsed().as_secs_f64(), min_remaining)
     }
-}
+} 
 
 fn main() {
     println!("=== PopStar AI Arena ===");
 
-    let total_games = std::env::var("NUM_GAMES")
-        .unwrap_or_else(|_| "10".to_string())
-        .parse::<usize>()
-        .unwrap_or(10);
-    let seeds: Vec<u64> = (1..=total_games).map(|x| x as u64).collect();
+    let mode = std::env::var("MODE").unwrap_or_else(|_| "research-eval".to_string());
+    
+    let seeds: Vec<u64> = match mode.as_str() {
+        "full-eval" => (1..=100).collect(),
+        "research-eval" | _ => (1001..=1010).collect(),
+    };
+    let total_games = seeds.len();
 
     let greedy_agent = GreedyAgent;
     let bmcts_agent = BmctsAgent { beam_width: 100, rollout_count: 20 };
