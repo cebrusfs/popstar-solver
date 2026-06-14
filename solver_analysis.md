@@ -1,94 +1,46 @@
-# PopStar Solver Analysis & AI Agent Guide
+# PopStar AI Solver Analysis & Leaderboard
 
-This document contains the latest benchmark data for the advanced AI solvers and serves as the **Agentic Improvement Loop** protocol for future AI agents to continue improving the solver.
-For foundational knowledge on the game rules, NP-Complete mathematical equivalence, exact search optimization (DFS), and basic greedy heuristics, please see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+## 1. Golden 100-Game Leaderboard (MODE=full-eval)
+This is the definitive benchmark running on 100 fixed random seeds (`MODE=full-eval`).
 
-## 1. Advanced Algorithms & AI Arena
+| Rank | Agent | Avg Score | Max Score | Clear Rate | Avg Time/Game | Notes |
+|---|---|---|---|---|---|---|
+| 🥇 | **RolloutBeam-W2000** | **5779.9** | 8400 | **100.0%** | **1.91s** | Deterministic Rollout Beam Search (W=2000). Best overall. |
+| 🥈 | **RolloutBeam-W500** | 5666.4 | 8400 | 92.0% | 1.35s | Same as above but slightly narrower beam. Extremely fast. |
+| 🥉 | **BMCTS-W100-N20-V2** | 5528.1 | 8400 | 73.0% | 1.68s | Previous SOTA. Replaced by RolloutBeam due to N20 redundancy. |
+| 4 | **RolloutBeam-W100** | 5531.1 | 8400 | 71.0% | 0.97s | Ultra-fast Rollout Beam. |
+| 5 | **BeamSearch-W5000-V2** | 5406.6 | 8340 | 92.0% | 3.14s | Pure static heuristic (Predictive V2). Very strong clear rate. |
+| 6 | **BeamSearch-W500-V2** | 5012.1 | 8325 | 67.0% | 0.43s | Lightweight static heuristic beam search. |
+| 7 | **SP-MCTS-250ms** | 4616.6 | 6700 | 27.0% | 3.71s | Single-Player Monte Carlo Tree Search with UCT. |
+| 8 | **NRPA-L2-I100** | 4462.8 | 7640 | 14.0% | 1.03s | Nested Rollout Policy Adaptation. |
+| 9 | **NMCS-L3** | ~4220.0 | ~4950 | 0.0% | ~1.9s | Nested Monte-Carlo Search. (Estimated from 10-game eval) |
+| 10 | **Greedy-MISPS** | 2324.7 | 4495 | 0.0% | 0.00s | Baseline greedy solver. |
 
-Because exact DFS cannot solve the 10x10 board, we shifted to advanced AI approximation algorithms. To test them, we built the **AI Arena** (`src/bin/arena.rs`), an automated benchmark platform that evaluates agents across a **Golden Set of 100 random seeds (Seeds 1~100)** using Rayon for multithreading.
 
-### AI Algorithms Implemented:
-1.  **Beam Search:** Instead of keeping all branches (DFS), Beam Search keeps only the top $K$ most promising states at each depth level. Using `K=5000`, we are able to look ahead all the way to the end of the game in under 1.5 seconds.
-2.  **Monte Carlo Tree Search (MCTS) & SP-MCTS:** Uses our ultra-fast zero-allocation bitboard engine to perform rapid playouts (using UCB1 selection and MISPS rollouts). We grant it a fixed time budget per move (e.g., 100ms or 250ms).
+## 2. Algorithm Evolutions & Architecture
+Our solver has evolved through multiple iterations:
 
-### Golden Set Benchmark (100 Seeds)
+1. **Greedy & DFS**: The original approach. DFS was too slow, Greedy was too weak.
+2. **Beam Search with Predictive Heuristics**: 
+   - Introduced `BeamSearch-W5000`. We developed `predictive_heuristic_v2` which statically evaluates a board by clustering components and heavily penalizing "split" components of the same color. This achieved 5400+ scores.
+3. **MCTS & NRPA**:
+   - Tried traditional UCT-based MCTS and NRPA (Nested Rollout Policy Adaptation). Both struggled to beat Beam Search because pure random rollouts in PopStar are highly deceptive.
+4. **BMCTS (Beam Monte Carlo Tree Search)**:
+   - Combined Beam Search (to keep top K branches) with MCTS (running N rollouts per node). 
+   - **Crucial Discovery**: Using the `predictive_heuristic_v2` to guide the rollouts instead of random play massively boosted performance to 5500+.
+5. **RolloutBeamSearch (The Breakthrough)**:
+   - We realized that `predictive_heuristic_v2` rollouts are completely *deterministic*. The `N=20` loop in BMCTS was evaluating the exact same sequence 20 times!
+   - By removing the redundant loop, we collapsed `BMCTS` into `RolloutBeamSearch`, effectively speeding it up by 20x. We reinvested this time into expanding the Beam Width from `W=100` to `W=2000`, achieving a staggering **100% Clear Rate** and **~5786** score.
 
-| Rank | Algorithm | Avg Score | Max Score | Clear Rate | Avg Time |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| 🥇 | **BMCTS (W=100, N=20) [Predictive V2 Rollout]** | **5537.3** | **8400** | **73.0%** | **1.70s** |
-| 🥈 | **BeamSearch (W=5000) [Predictive V2: Component Split Penalty]** | 5407.9 | 8340 | 92.0% | 3.03s |
-| 🥉 | **BeamSearch (W=500) [Predictive V2: Component Split Penalty]** | 5013.2 | 8325 | 66.0% | 0.42s |
-| 4 | **SP-MCTS (250ms/move)** | 4548.6 | 6430 | 26.0% | 3.85s |
-| 5 | **NRPA (Level=2, Iterations=100)** | 4439.8 | 7195 | 19.0% | 1.01s |
-| 6 | **MCTS (100ms/move)** | 4193.8 | 5875 | 23.0% | 1.08s |
-| 7 | **Greedy (MISPS)** | 2324.7 | 4495 | 0.0% | 0.0003s |
+## 3. Agentic Improvement Loop Protocol
 
-By injecting the **Predictive V2 (Component Split Penalty)** into the rollout phase of BMCTS, we successfully broke the previous 5405-point ceiling! The new **BMCTS-W100-N20-V2** achieves an incredible average score of **5537.3** and a new maximum score of **8400**. Furthermore, thanks to Rayon-powered parallel sorting, it runs almost twice as fast as the heavy `W=5000` Beam Search.
+For future AI Agents working on this project autonomously, follow this protocol to continuously improve the solver:
 
-## 2. Agentic Improvement Loop (Protocol for Autonomous AI)
-
-This section contains exact instructions for future AI agents to continue improving the solver autonomously without requiring user intervention. Future AI agents must strictly follow this step-by-step loop.
-
-### Objective
-Your goal is to beat the current top average score and perfect clear rate on the **Golden Set Benchmark (100 Seeds)**. Currently, the target to beat is the 🥇 **BeamSearch (W=5000)** baseline (89% clear rate).
-
-### Step-by-Step Execution Protocol
-
-1.  **Ideation & Implementation:**
-    *   **Continuous Academic Review:** Before forming a hypothesis, crawl recent papers or online resources on solving "SameGame" or "Clickomania" (e.g., using a web search tool or academic databases). Look for state-of-the-art enhancements.
-    *   Formulate a specific algorithmic hypothesis based on literature or heuristics. Examples:
-        *   **Heuristics Enhancement:** Improve the evaluation heuristic used in Beam Search to select the top $K$ branches. E.g., introduce connectivity-based evaluation or prioritize keeping colors grouped together instead of assuming the optimistic `calculate_admissible_heuristic`.
-        *   **MCTS Rollout Strategy:** Replace the greedy `MISPS` rollout in MCTS with a more domain-aware rule (e.g., preserving vertical matches). Tune exploration constants (`UCT`), add Progressive Widening, or integrate RAVE.
-        *   **Engine Optimization:** Profile and optimize memory/CPU hot-paths to enable more iterations/deeper searches per second.
-    *   Implement your new feature in the source code (typically under `src/agents/`, `src/evaluator.rs`, or `src/board.rs`). Ensure you test it logically before benchmarking.
-    *   Integrate your agent/heuristic into the Arena. Open `src/bin/arena.rs` and add an entry to the `agents` vector for your new implementation, clearly labeling it (e.g., `"MCTS_Tuned"`, `"BeamSearch_ConnectedHeuristic"`).
-
-2.  **Benchmark Execution:**
-    *   Compile and run the Arena benchmarker locally over the Golden Set (100 random seeds):
-        ```bash
-        cd popstar_solver
-        NUM_GAMES=100 cargo run --release --bin arena
-        ```
-    *   *Note:* The `--release` flag is critically important. Debug builds are too slow. Default `cargo run --release --bin arena` runs only 10 seeds for fast iterations.
-
-3.  **Evaluation & Verification:**
-    *   Analyze the console output of the Arena run.
-    *   Compare the **Average Score**, **Perfect Clear Rate**, and **Average Time** of your new agent against the baseline table listed in Section 1.
-    *   **Success Criteria:** An implementation is considered a "Win" if it either:
-        *   Increases the Average Score and/or Perfect Clear Rate with reasonable performance overhead.
-        *   Achieves comparable scores but operates significantly faster.
-
-4.  **Documentation & Persistence:**
-    *   **If the benchmark fails or scores are worse:** Use `jj undo` to revert the code, or modify the logic and repeat step 1. Do NOT commit regressions.
-    *   **If the benchmark succeeds:** 
-        1.  Update the **Golden Set Benchmark (100 Seeds)** table in Section 1 of this file (`solver_analysis.md`) with the new rankings, scores, and clear rates.
-        2.  Write a brief summary of the successful strategy below the table.
-        3.  Ensure the working directory is clean (`jj status`), fix up the code styling (`cargo fmt`), and persist the change:
-            ```bash
-            jj new -m "feat: <describe your algorithm optimization>"
-            ```
-
-4.  **Resiliency & Worklog (State Hand-off Mechanism):**
-    *   **Because background models may occasionally fail or be interrupted (e.g., 503 capacity errors), you MUST maintain an `agent_worklog.md` in your workspace.**
-    *   Every time you form a hypothesis, finish a code change, or get a new benchmark result, append it to `agent_worklog.md` and commit it immediately using `jj new -m "chore: update worklog"`.
-    *   If you are a freshly spawned agent taking over an existing workspace, your VERY FIRST ACTION must be to read `agent_worklog.md` to understand the previous agent's progress, what failed, and what you need to do next to seamlessly resume the work.
-5.  **Iteration:**
-    *   Once a new baseline is established, repeat the entire loop. Keep pushing the theoretical limits of the 10x10 PopStar board!
-
-## 3. Academic Literature & Future Improvement Directions
-
-Based on research into solving the **SameGame** / **Clickomania** NP-Complete problem, academic literature highlights several state-of-the-art algorithms that future agents should attempt to implement to break current records:
-
-1.  **Single-Player MCTS (SP-MCTS):**
-    Traditional MCTS (like UCT) is designed for adversarial games to maximize win rates. For single-player puzzles, SP-MCTS modifies the Selection and Backpropagation phases to optimize for the **Max Score** rather than a win probability, often propagating the maximum score found in a subtree rather than the average.
-2.  **NRPA (Nested Rollout Policy Adaptation):**
-    A record-breaking algorithm in the SameGame domain. Instead of relying on random or static greedy rollouts (like our `MISPS`), NRPA learns an online rollout policy during the search. It adjusts the probability of choosing certain colors/moves based on the sequences that previously yielded high scores, making the Monte Carlo simulations progressively smarter.
-    *   **GNRPA (Generalized NRPA)**: Introduces a "Temperature" parameter to dynamically control the exploration vs. exploitation trade-off, preventing the policy from falling into local optima.
-3.  **BMCTS (Beam Monte-Carlo Tree Search):**
-    A hybrid approach. It uses Beam Search to prune the tree (keeping only the top $K$ nodes per depth), but instead of using a static heuristic to rank the nodes, it uses MCTS rollouts to evaluate their true potential.
-    *   **High-Priority Enhancement**: Currently, our BMCTS uses a brainless greedy rollout. Injecting our `Predictive V2 (Component Split Penalty)` heuristic or a **Tabu Color** strategy (withholding clicks from the most abundant color) into the rollout phase is the most promising path to shattering current records.
-4.  **Nested Monte-Carlo Search (NMCS) & Macro-moves:**
-    Often simpler and more effective than SP-MCTS. It can be further augmented by generating "Macro-moves" via BFS—multi-step sequences that intentionally merge disjoint components of the same color, allowing the solver to bridge the valley of short-term penalties for massive long-term quadratic payoffs.
-5.  **RAVE (Rapid Action Value Estimation):**
-    An enhancement for MCTS that shares the value of actions (moves) across different branches of the tree. If eliminating a specific green block proves highly valuable in one branch, RAVE biases the search to try that same elimination early in other branches, drastically speeding up convergence in the early stages of the search.
-
+1. **Ideation**: Read `solver_analysis.md` to understand the current SOTA (`RolloutBeam-W2000`). Formulate a new hypothesis (e.g. PUCT for Beam Search, Endgame Exact Solver, better rollout heuristics).
+2. **Isolation & Checkpoint**: Use `jj new -m "feat: your idea"` to create a safe commit BEFORE touching code.
+3. **Implementation**: Edit `src/advanced_solvers.rs` or `src/bin/arena.rs`. If creating a new algorithm, decouple it so it implements the `Agent` trait and add it to the `arena.rs` agent list.
+4. **Rapid Tuning (10 Games)**: Run `MODE=research-eval cargo run --release --bin arena`. This runs the AI on seeds 1001-1010 (10 games). Iterate on your hyperparameters until your algorithm beats the baseline or looks promising.
+5. **Full Evaluation (100 Games)**: Once tuned, run `MODE=full-eval cargo run --release --bin arena` (seeds 1-100). If it takes a long time, use `schedule` or check logs.
+6. **Decision**:
+   - **Success**: Update the Leaderboard in this document, summarize the breakthrough, and keep the commit.
+   - **Failure**: Abandon the commit (`jj abandon`) to keep the codebase clean, document the failure here, and loop back to step 1.
